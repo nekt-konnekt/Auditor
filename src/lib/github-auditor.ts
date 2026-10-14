@@ -228,6 +228,7 @@ export async function auditGitHubRepo(url: string): Promise<AuditReport> {
       severity: 'low',
       title: 'Missing .gitignore File',
       description: 'No root-level .gitignore was found. This does not establish that unwanted files are committed or that nested ignore files are absent.',
+      evidence: 'Root-level .gitignore fetch returned 404 on the verified default branch.',
       impact: 'Without suitable ignore rules, local or generated files may be committed accidentally. No such committed files were confirmed by this check.',
       remediation: 'Add a standard `.gitignore` suited to your project tech stack.',
     });
@@ -260,13 +261,22 @@ export async function auditGitHubRepo(url: string): Promise<AuditReport> {
           id: 'gh-pkg-pass',
           category: 'quality',
           severity: 'passed',
-          title: 'Dependencies Properly Version-Pinned',
-          description: `All ${depCount + devDepCount} declared packages use bounded semantic version constraints.`,
+          title: 'No Wildcard or latest Dependency Tags Detected',
+          description: `No '*' or 'latest' tags were detected in ${depCount + devDepCount} declared dependencies. This check does not validate version-range bounds, lockfile reproducibility, or known vulnerabilities.`,
           remediation: 'Run automated audit tooling like npm audit or Snyk.',
         });
       }
     } catch {
-      // Malformed package.json
+      issues.push({
+        id: 'gh-package-invalid',
+        category: 'quality',
+        severity: 'medium',
+        title: 'package.json Could Not Be Parsed',
+        description: 'The inspected package.json is not valid JSON, so dependency-manifest checks were skipped.',
+        impact: 'Auditor could not reliably inspect declared package versions. This result provides no conclusion about dependency vulnerabilities.',
+        evidence: packageJson.substring(0, 180),
+        remediation: 'Validate package.json syntax, fix the parse error, and rerun the repository hygiene review. Use a dependency advisory scanner for known vulnerabilities.',
+      });
     }
   }
 
@@ -293,6 +303,7 @@ export async function auditGitHubRepo(url: string): Promise<AuditReport> {
         severity: 'medium',
         title: 'No Common Root-Level License File Detected',
         description: 'GitHub did not report a recognized license, and Auditor did not find a license file at the common root-level paths it checked. Other locations or custom arrangements were not inspected.',
+        evidence: 'No recognized GitHub license metadata or common root-level license file was found.',
         impact: 'Without applicable license terms, others may not have permission to reuse or redistribute the code. This check is limited to repository metadata and common root-level filenames.',
         remediation: 'Confirm the intended licensing policy and add an appropriate license file if the repository is meant to be reused or distributed.',
         references: [{ title: 'Choose an Open Source License', url: 'https://choosealicense.com/' }],
