@@ -110,17 +110,32 @@ export async function auditGitHubRepo(url: string): Promise<AuditReport> {
     return await res.text();
   };
 
-  const [secRes, gitignoreRes, pkgRes, readmeRes] = await Promise.all([
+  const [
+    secRes,
+    secGithubRes,
+    secDocsRes,
+    gitignoreRes,
+    pkgRes,
+    readmeMdRes,
+    readmeRes,
+    readmeRstRes,
+    readmeTxtRes,
+  ] = await Promise.all([
     fetchRaw('SECURITY.md'),
+    fetchRaw('.github/SECURITY.md'),
+    fetchRaw('docs/SECURITY.md'),
     fetchRaw('.gitignore'),
     fetchRaw('package.json'),
     fetchRaw('README.md'),
+    fetchRaw('README'),
+    fetchRaw('README.rst'),
+    fetchRaw('README.txt'),
   ]);
 
-  securityMd = secRes;
+  securityMd = secRes ?? secGithubRes ?? secDocsRes;
   gitignore = gitignoreRes;
   packageJson = pkgRes;
-  readme = readmeRes;
+  readme = readmeMdRes ?? readmeRes ?? readmeRstRes ?? readmeTxtRes;
 
   // GitHub may not classify custom license files. Probe common root filenames
   // before claiming that no license file exists.
@@ -141,21 +156,21 @@ export async function auditGitHubRepo(url: string): Promise<AuditReport> {
   // 3. Deterministic Security & Repository Hygiene Checks
 
   // Check: SECURITY.md
-  metrics['Security Policy'] = securityMd ? 'Present' : 'Missing';
+  metrics['Security Policy'] = securityMd ? 'Present in a checked location' : 'No policy file found at checked locations';
   if (!securityMd) {
     issues.push({
       id: 'gh-sec-policy',
       category: 'security',
-      severity: 'medium',
-      title: 'Missing SECURITY.md Vulnerability Disclosure Policy',
-      description: 'The repository does not contain a SECURITY.md file instructing security researchers how to responsibly disclose discovered vulnerabilities.',
-      impact: 'Security flaws may be published openly in public GitHub Issues rather than handled privately via confidential advisory channels.',
-      remediation: 'Create a `SECURITY.md` in the repository root defining supported versions and a private contact email / PGP key for security disclosures.',
+      severity: 'low',
+      title: 'No Security Policy File Found in Checked Locations',
+      description: 'Auditor did not find SECURITY.md at the repository root, .github/SECURITY.md, or docs/SECURITY.md. This is a disclosure-process gap, not evidence that a vulnerability exists.'
+      impact: 'Without a clear private disclosure path, reporters may not know how to share security concerns responsibly.'
+      remediation: 'Add a security policy in a supported location, document supported versions, and provide a verified private reporting channel.'
       references: [
         { title: 'GitHub: Adding a security policy', url: 'https://docs.github.com/en/code-security/getting-started/adding-a-security-policy-to-your-repository' },
       ],
       codeSnippet: {
-        proposed: `# Security Policy\n\n## Supported Versions\n| Version | Supported |\n| ------- | --------- |\n| 1.0.x   | Yes       |\n\n## Reporting a Vulnerability\nPlease send security inquiries privately to security@${owner.toLowerCase()}.com.`,
+        proposed: `# Security Policy\n\n## Supported Versions\n| Version | Supported |\n| ------- | --------- |\n| 1.0.x   | Yes       |\n\n## Reporting a Vulnerability\nPlease send security inquiries privately to security@your-domain.example.`,
       },
     });
   } else {
@@ -172,8 +187,16 @@ export async function auditGitHubRepo(url: string): Promise<AuditReport> {
 
   // Check: .gitignore secret coverage
   if (gitignore) {
-    const hasEnvIgnored = /^\s*\.env/m.test(gitignore);
-    metrics['Secrets in .gitignore'] = hasEnvIgnored ? 'Excludes .env files' : 'No .env exclusion detected';
+    const envIgnorePatterns = new Set([
+      '.env', '.env.*', '.env.local', '.env*', '/.env', '/.env.*',
+      '**/.env', '**/.env.*', '*.env', '*.env.*',
+    ]);
+    const hasEnvIgnored = gitignore.split(/\r?\n/).some((line) => {
+      const pattern = line.trim();
+      return pattern.length > 0 && !pattern.startsWith('#') && !pattern.startsWith('!')
+        && envIgnorePatterns.has(pattern);
+    });
+    metrics['Secrets in .gitignore'] = hasEnvIgnored ? 'Common .env ignore rule detected' : 'No common .env ignore rule detected';
 
     if (!hasEnvIgnored) {
       issues.push({
@@ -203,10 +226,10 @@ export async function auditGitHubRepo(url: string): Promise<AuditReport> {
     issues.push({
       id: 'gh-gitignore-missing',
       category: 'quality',
-      severity: 'medium',
+      severity: 'low',
       title: 'Missing .gitignore File',
-      description: 'No .gitignore file was detected in the root of the repository.',
-      impact: 'Operating system artifacts, build binaries, node_modules, and temporary files will pollute the repository history.',
+      description: 'No root-level .gitignore was found. This does not establish that unwanted files are committed or that nested ignore files are absent.'
+      impact: 'Without suitable ignore rules, local or generated files may be committed accidentally. No such committed files were confirmed by this check.'
       remediation: 'Add a standard `.gitignore` suited to your project tech stack.',
     });
   }
