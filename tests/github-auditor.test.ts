@@ -84,6 +84,8 @@ test('repository audit distinguishes an unclassified license file from no licens
     assert.match(markdown, /Target Type\*\*: REPOSITORY/);
     assert.doesNotMatch(markdown, /HTTP Status/);
     assert.match(markdown, /Repository Hygiene Diagnostic Score/);
+    assert.match(markdown, /Repository Security Hygiene/);
+    assert.match(markdown, /website-only; not assessed/);
     assert.match(markdown, /Not assessed/);
     assert.match(markdown, /did not scan all source files/i);
     assert.doesNotMatch(markdown, /\{#if report\.target\.type/);
