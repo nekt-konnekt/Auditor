@@ -38,11 +38,11 @@ export function runUrlDeterministicAudit(input: UrlAuditInput): {
     issues.push({
       id: 'sec-https',
       category: 'security',
-      severity: 'critical',
+      severity: 'high',
       title: 'Insecure HTTP Transport Protocol',
-      description: 'The target website is serving traffic over plaintext HTTP without TLS encryption.',
-      impact: 'Allows man-in-the-middle (MITM) attackers to sniff credentials, inject malicious scripts, or tamper with data in transit.',
-      remediation: 'Obtain an SSL/TLS certificate (e.g., via Let’s Encrypt) and enforce automatic HTTP-to-HTTPS 301 redirection on your web server.',
+      description: 'The submitted URL uses plaintext HTTP, so this request is not protected by TLS. This observation describes transport security; it does not establish what data the site handles or whether a specific attack is exploitable.',
+      impact: 'Traffic can be read or modified by an on-path attacker. The practical impact depends on the content and functionality served; sensitive forms, sessions, or data should not be sent over HTTP.',
+      remediation: 'For a conventional public website, configure HTTPS and redirect HTTP requests to HTTPS. Some narrowly scoped services intentionally use HTTP for captive-portal detection; document that exception and do not send sensitive data over that endpoint.',
       references: [{ title: 'MDN: Transport Layer Security', url: 'https://developer.mozilla.org/en-US/docs/Glossary/TLS' }],
     });
   } else {
@@ -98,8 +98,10 @@ export function runUrlDeterministicAudit(input: UrlAuditInput): {
 
   // Check 3: Strict-Transport-Security (HSTS)
   const hsts = headers['strict-transport-security'];
-  metrics['HSTS Present'] = !!hsts;
-  if (!hsts) {
+  // Browsers ignore HSTS received over HTTP, so its absence on an HTTP response
+  // is not an independent finding. Evaluate HSTS only on HTTPS responses.
+  metrics['HSTS Present'] = isHttps ? !!hsts : 'Not applicable (HTTP)';
+  if (isHttps && !hsts) {
     issues.push({
       id: 'sec-hsts',
       category: 'security',
@@ -109,7 +111,7 @@ export function runUrlDeterministicAudit(input: UrlAuditInput): {
       impact: 'Users making initial HTTP requests may be susceptible to SSL stripping attacks before any redirection occurs.',
       remediation: 'Add `Strict-Transport-Security: max-age=31536000; includeSubDomains; preload` to your server response headers.',
     });
-  } else {
+  } else if (isHttps) {
     issues.push({
       id: 'sec-hsts-pass',
       category: 'security',
@@ -193,7 +195,7 @@ export function runUrlDeterministicAudit(input: UrlAuditInput): {
     issues.push({
       id: 'seo-title-missing',
       category: 'seo',
-      severity: 'critical',
+      severity: 'high',
       title: 'Missing <title> Element',
       description: 'The HTML document does not contain a <title> tag in the <head>.',
       impact: 'Critical search indexing penalty; search engines cannot determine page subject and browser tabs show URL.',
@@ -326,7 +328,7 @@ export function runUrlDeterministicAudit(input: UrlAuditInput): {
     issues.push({
       id: 'seo-viewport',
       category: 'seo',
-      severity: 'critical',
+      severity: 'high',
       title: 'Missing Viewport Meta Tag',
       description: 'The page does not declare a mobile viewport tag.',
       impact: 'Mobile browsers will render the desktop version in 980px zoom mode, failing mobile-friendliness audits.',
