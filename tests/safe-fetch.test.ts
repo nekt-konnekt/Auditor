@@ -6,7 +6,8 @@ import test from 'node:test';
 import { requestPinnedPublicResponse, resolvePublicRedirect, validatePublicHttpUrl } from '../src/lib/safe-fetch.ts';
 
 async function startServer(handler: RequestListener): Promise<{ server: Server; port: number }> {
-  const server = createServer(handler);
+  const server = createServer();
+  server.on('request', handler);
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject);
     server.listen(0, '127.0.0.1', () => resolve());
