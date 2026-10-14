@@ -450,6 +450,8 @@ export function runUrlDeterministicAudit(input: UrlAuditInput): {
   metrics['External Scripts'] = scriptTags;
   metrics['External Stylesheets'] = styleTags;
   metrics['HTML Fetch Duration'] = `${input.responseTimeMs} ms`;
+  metrics['Browser Runtime Checks'] = 'Not performed';
+  metrics['Route Coverage'] = 'Submitted URL only';
   metrics['HTTP Status'] = input.statusCode;
   metrics['HTTP Status Class'] = `${Math.floor(input.statusCode / 100)}xx`;
 
