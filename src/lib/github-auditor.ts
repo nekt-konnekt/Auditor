@@ -322,7 +322,7 @@ export async function auditGitHubRepo(url: string): Promise<AuditReport> {
     id: reportId,
     createdAt,
     target: {
-      type: 'url',
+      type: 'repository',
       target: `https://github.com/${fullName}`,
       filename: fullName,
       statusCode: 200,
