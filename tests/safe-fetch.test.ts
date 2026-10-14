@@ -69,7 +69,7 @@ test('redirect destinations are resolved and validated before they can be reques
   );
 });
 
-test('outbound requests use the validated IP while preserving the original Host header', async () => {
+test('outbound requests pin the connection to the supplied IP while preserving the original Host header', async () => {
   const { server, port } = await startServer((request, response) => {
     response.setHeader('x-test-host', request.headers.host || '');
     response.setHeader('content-type', 'text/html; charset=utf-8');
