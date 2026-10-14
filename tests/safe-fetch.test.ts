@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import { createServer, type RequestListener, type Server } from 'node:http';
 import { gzipSync } from 'node:zlib';
 import type { AddressInfo } from 'node:net';
 import test from 'node:test';
 import { requestPinnedPublicResponse, resolvePublicRedirect, validatePublicHttpUrl } from '../src/lib/safe-fetch.ts';
 
-async function startServer(handler: (request: IncomingMessage, response: ServerResponse) => void): Promise<{ server: Server; port: number }> {
+async function startServer(handler: RequestListener): Promise<{ server: Server; port: number }> {
   const server = createServer(handler);
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject);
