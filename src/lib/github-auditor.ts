@@ -1,6 +1,66 @@
 import { AuditIssue, AuditReport, Category, CategoryScore } from '../types/audit.ts';
 import { calculateAuditScores } from './audit-rules.ts';
 
+export interface FetchLimits {
+  maxBytes?: number;
+  timeoutMs?: number;
+}
+
+/**
+ * Fetch a bounded response so remote repository content cannot hang an audit
+ * indefinitely or consume unbounded memory. The returned Response has a
+ * reconstructed, already-bounded body for normal status/JSON/text handling.
+ */
+export async function fetchWithLimits(
+  input: RequestInfo | URL,
+  init: RequestInit = {},
+  limits: FetchLimits = {},
+): Promise<Response> {
+  const maxBytes = limits.maxBytes ?? 1_000_000;
+  const timeoutMs = limits.timeoutMs ?? 10_000;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(new Error('GitHub request timed out')), timeoutMs);
+  try {
+    const response = await fetch(input, { ...init, signal: controller.signal });
+    if (!response.body) {
+      const text = await response.text();
+      if (new TextEncoder().encode(text).byteLength > maxBytes) {
+        throw new Error('GitHub response exceeded the configured size limit');
+      }
+      return new Response(text, { status: response.status, statusText: response.statusText, headers: response.headers });
+    }
+
+    const reader = response.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let totalBytes = 0;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        totalBytes += value.byteLength;
+        if (totalBytes > maxBytes) {
+          await reader.cancel('GitHub response exceeded the configured size limit').catch(() => undefined);
+          throw new Error(`GitHub response exceeded the ${maxBytes}-byte size limit`);
+        }
+        chunks.push(value);
+      }
+    } finally {
+      reader.releaseLock();
+    }
+
+    const body = new Uint8Array(totalBytes);
+    let offset = 0;
+    for (const chunk of chunks) {
+      body.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+
 export interface GitHubRepoDetails {
   owner: string;
   repo: string;
@@ -54,7 +114,7 @@ export async function auditGitHubRepo(url: string): Promise<AuditReport> {
   // otherwise unverifiable repository: that would present guesses as findings.
   let apiRes: Response;
   try {
-    apiRes = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
+    apiRes = await fetchWithLimits(`https://api.github.com/repos/${owner}/${repo}`, {
       headers: {
         'User-Agent': 'Auditor-Engine/2.4 (Security Audit Bot)',
         'Accept': 'application/vnd.github.v3+json',
@@ -96,7 +156,7 @@ export async function auditGitHubRepo(url: string): Promise<AuditReport> {
   const fetchRaw = async (filePath: string): Promise<string | null> => {
     let res: Response;
     try {
-      res = await fetch(`https://raw.githubusercontent.com/${owner}/${repo}/${defaultBranch}/${filePath}`, {
+      res = await fetchWithLimits(`https://raw.githubusercontent.com/${owner}/${repo}/${defaultBranch}/${filePath}`, {
         headers: { 'User-Agent': 'Auditor-Engine/2.4' },
       });
     } catch {
