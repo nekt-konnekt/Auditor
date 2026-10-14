@@ -78,8 +78,11 @@ test('repository audit distinguishes an unclassified license file from no licens
   try {
     const report = await auditGitHubRepo('https://github.com/octocat/Hello-World');
     assert.equal(report.target.type, 'repository');
+    assert.equal(report.target.statusCode, undefined);
+    assert.equal(report.target.responseTimeMs, undefined);
     const markdown = generateAuditMarkdown(report);
     assert.match(markdown, /Target Type\*\*: REPOSITORY/);
+    assert.doesNotMatch(markdown, /HTTP Status/);
     assert.match(markdown, /Repository Hygiene Diagnostic Score/);
     assert.match(markdown, /Not assessed/);
     assert.match(markdown, /did not scan all source files/i);
