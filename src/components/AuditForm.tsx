@@ -119,7 +119,6 @@ export const AuditForm: React.FC<AuditFormProps> = ({ onStartAudit, isLoading })
                 autoComplete="url"
                 className="block w-full px-4 py-3 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 font-mono"
               />
-              <p className="mt-2 text-xs text-slate-500">Only publicly reachable HTTP/HTTPS targets are accepted. Private network addresses are blocked.</p>
             </div>
           ) : (
             <div className="space-y-5">
@@ -167,7 +166,6 @@ export const AuditForm: React.FC<AuditFormProps> = ({ onStartAudit, isLoading })
           )}
 
           <div className="mt-8 pt-6 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <p className="text-xs text-slate-500">AI-assisted findings are recommendations, not a substitute for a professional security review.</p>
             <button
               type="submit"
               disabled={isLoading}
