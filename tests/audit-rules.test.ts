@@ -103,7 +103,7 @@ test('large HTML payloads are measured in UTF-8 bytes and flagged', () => {
   const html = cleanHtml.replace('</body>', `${'x'.repeat(520 * 1024)}</body>`);
   const result = audit({ html });
   assert.equal(result.issues.find((item) => item.id === 'perf-html-bloat')?.severity, 'medium');
-  assert.ok(Number.parseFloat(String(result.metrics['HTML Size'])) > 500);
+  assert.ok(Number.parseFloat(String(result.metrics['Decoded HTML Size'])) > 500);
 });
 
 test('response-time thresholds are deterministic at 800ms and 2000ms boundaries', () => {
