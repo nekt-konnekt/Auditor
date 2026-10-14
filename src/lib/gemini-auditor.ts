@@ -59,9 +59,9 @@ export function filterEvidenceBackedIssues(
     return [{
       id: `ai-finding-${idx + 1}-${Date.now().toString(36)}`,
       category: cat,
-      severity: sev,
-      title: item.title,
-      description: item.description,
+      severity: sev === 'critical' ? 'high' : sev,
+      title: `Potential (AI-assisted): ${item.title}`,
+      description: `AI-assisted interpretation; surrounding context and exploitability were not independently validated. ${item.description}`,
       impact: typeof item.impact === 'string' ? item.impact : undefined,
       remediation: item.remediation,
       evidence,
