@@ -58,7 +58,7 @@ export function runUrlDeterministicAudit(input: UrlAuditInput): {
 
   // Check 2: Content-Security-Policy
   const csp = headers['content-security-policy'];
-  const weakCspPattern = /(?:unsafe-inline|unsafe-eval|(?:script-src|default-src)\\s+[^;]*\\*)/i;
+  const weakCspPattern = /(?:unsafe-inline|unsafe-eval|(?:script-src|default-src)\s+[^;]*\*)/i;
   metrics['CSP Present'] = !!csp;
   if (!csp) {
     issues.push({
