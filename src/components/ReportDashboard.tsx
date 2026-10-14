@@ -101,6 +101,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
   const isHttpErrorResponse = report.target.type === 'url'
     && typeof report.target.statusCode === 'number'
     && report.target.statusCode >= 400;
+  const primaryCategory = report.target.type === 'url' ? report.categories.performance : report.categories.quality;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
@@ -213,12 +214,14 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
           </span>
           <div className="mt-2 flex items-baseline gap-1">
             <span className="text-3xl font-extrabold text-slate-900 font-mono tabular-nums">
-              {report.categories.security?.score ?? 100}
+              {(report.categories.security?.totalChecks ?? 0) > 0 ? report.categories.security?.score : '—'}
             </span>
-            <span className="text-xs font-medium text-slate-400 font-mono">/100</span>
+            {(report.categories.security?.totalChecks ?? 0) > 0 && <span className="text-xs font-medium text-slate-400 font-mono">/100</span>}
           </div>
           <p className="mt-2 text-xs text-slate-500 font-mono">
-            {report.categories.security?.passedCount ?? 0} / {report.categories.security?.totalChecks ?? 0} checks passed · {Math.max(0, (report.categories.security?.totalChecks ?? 0) - (report.categories.security?.passedCount ?? 0))} issues
+            {(report.categories.security?.totalChecks ?? 0) > 0
+              ? `${report.categories.security?.passedCount ?? 0} / ${report.categories.security?.totalChecks ?? 0} checks passed · ${Math.max(0, (report.categories.security?.totalChecks ?? 0) - (report.categories.security?.passedCount ?? 0))} issues`
+              : 'Not assessed — no checks in this audit mode'}
           </p>
         </div>
 
@@ -229,12 +232,14 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
           </span>
           <div className="mt-2 flex items-baseline gap-1">
             <span className="text-3xl font-extrabold text-slate-900 font-mono tabular-nums">
-              {report.categories.seo?.score ?? 100}
+              {(report.categories.seo?.totalChecks ?? 0) > 0 ? report.categories.seo?.score : '—'}
             </span>
-            <span className="text-xs font-medium text-slate-400 font-mono">/100</span>
+            {(report.categories.seo?.totalChecks ?? 0) > 0 && <span className="text-xs font-medium text-slate-400 font-mono">/100</span>}
           </div>
           <p className="mt-2 text-xs text-slate-500 font-mono">
-            {report.categories.seo?.passedCount ?? 0} / {report.categories.seo?.totalChecks ?? 0} checks passed · {Math.max(0, (report.categories.seo?.totalChecks ?? 0) - (report.categories.seo?.passedCount ?? 0))} issues
+            {(report.categories.seo?.totalChecks ?? 0) > 0
+              ? `${report.categories.seo?.passedCount ?? 0} / ${report.categories.seo?.totalChecks ?? 0} checks passed · ${Math.max(0, (report.categories.seo?.totalChecks ?? 0) - (report.categories.seo?.passedCount ?? 0))} issues`
+              : 'Not assessed — no checks in this audit mode'}
           </p>
         </div>
 
@@ -245,12 +250,14 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
           </span>
           <div className="mt-2 flex items-baseline gap-1">
             <span className="text-3xl font-extrabold text-slate-900 font-mono tabular-nums">
-              {report.categories.accessibility?.score ?? 100}
+              {(report.categories.accessibility?.totalChecks ?? 0) > 0 ? report.categories.accessibility?.score : '—'}
             </span>
-            <span className="text-xs font-medium text-slate-400 font-mono">/100</span>
+            {(report.categories.accessibility?.totalChecks ?? 0) > 0 && <span className="text-xs font-medium text-slate-400 font-mono">/100</span>}
           </div>
           <p className="mt-2 text-xs text-slate-500 font-mono">
-            {report.categories.accessibility?.passedCount ?? 0} / {report.categories.accessibility?.totalChecks ?? 0} checks passed · {Math.max(0, (report.categories.accessibility?.totalChecks ?? 0) - (report.categories.accessibility?.passedCount ?? 0))} issues
+            {(report.categories.accessibility?.totalChecks ?? 0) > 0
+              ? `${report.categories.accessibility?.passedCount ?? 0} / ${report.categories.accessibility?.totalChecks ?? 0} checks passed · ${Math.max(0, (report.categories.accessibility?.totalChecks ?? 0) - (report.categories.accessibility?.passedCount ?? 0))} issues`
+              : 'Not assessed — no checks in this audit mode'}
           </p>
         </div>
 
@@ -261,16 +268,14 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
           </span>
           <div className="mt-2 flex items-baseline gap-1">
             <span className="text-3xl font-extrabold text-slate-900 font-mono tabular-nums">
-              {report.target.type === 'url'
-                ? report.categories.performance?.score ?? 100
-                : report.categories.quality?.score ?? 100}
+              {(primaryCategory?.totalChecks ?? 0) > 0 ? primaryCategory?.score : '—'}
             </span>
-            <span className="text-xs font-medium text-slate-400 font-mono">/100</span>
+            {(primaryCategory?.totalChecks ?? 0) > 0 && <span className="text-xs font-medium text-slate-400 font-mono">/100</span>}
           </div>
           <p className="mt-2 text-xs text-slate-500 font-mono">
-            {report.target.type === 'url'
-              ? `${report.categories.performance?.passedCount ?? 0} / ${report.categories.performance?.totalChecks ?? 0} checks passed · ${Math.max(0, (report.categories.performance?.totalChecks ?? 0) - (report.categories.performance?.passedCount ?? 0))} issues`
-              : `${report.categories.quality?.passedCount ?? 0} / ${report.categories.quality?.totalChecks ?? 0} checks passed · ${Math.max(0, (report.categories.quality?.totalChecks ?? 0) - (report.categories.quality?.passedCount ?? 0))} issues`}
+            {(primaryCategory?.totalChecks ?? 0) > 0
+              ? `${primaryCategory?.passedCount ?? 0} / ${primaryCategory?.totalChecks ?? 0} checks passed · ${Math.max(0, (primaryCategory?.totalChecks ?? 0) - (primaryCategory?.passedCount ?? 0))} issues`
+              : 'Not assessed — no checks in this audit mode'}
           </p>
         </div>
       </div>
