@@ -24,6 +24,11 @@ export function generateAuditMarkdown(report: AuditReport): string {
     && typeof report.target.statusCode === 'number'
     && report.target.statusCode >= 400;
   const scoreLabel = isHttpErrorResponse ? 'Diagnostic Score (Error Response)' : report.target.type === 'repository' ? 'Repository Hygiene Diagnostic Score' : report.target.type === 'code' ? 'Source Snippet Diagnostic Score' : 'Severity-weighted Diagnostic Score';
+  const coverageNote = report.target.type === 'url'
+    ? '> Not performed: browser rendering tests, Core Web Vitals or real-user performance measurement, authenticated-flow checks, and audits of other routes. This report evaluates listed rules against the submitted URL response; it is not a guarantee of overall security or accessibility.'
+    : report.target.type === 'repository'
+      ? '> Coverage: public repository metadata and selected root-level files on the default branch only. Not performed: full source-tree or git-history scanning, secret scanning across all files, dependency vulnerability database checks, private repository review, or deployed runtime testing. This is a repository-hygiene review, not a complete security audit.'
+      : '> Coverage: only the supplied source-code snippet was inspected. Not performed: full-repository review, dependency analysis, build/runtime testing, authentication-flow review, or validation of surrounding application context. Findings are diagnostic signals, not proof of exploitability or a guarantee that other issues are absent.';
 
   let md = `# Audit Report: ${targetLabel}
 
@@ -43,10 +48,7 @@ ${isHttpErrorResponse ? `\n> **Target returned HTTP ${report.target.statusCode}.
 
 ${report.summary}
 
-{#if report.target.type === 'url'}> Not performed: browser rendering tests, Core Web Vitals or real-user performance measurement, authenticated-flow checks, and audits of other routes. This report evaluates listed rules against the submitted URL response; it is not a guarantee of overall security or accessibility.
-{:else if report.target.type === 'repository'}> Coverage: public repository metadata and selected root-level files on the default branch only. Not performed: full source-tree or git-history scanning, secret scanning across all files, dependency vulnerability database checks, private repository review, or deployed runtime testing. This is a repository-hygiene review, not a complete security audit.
-{:else}> Coverage: only the supplied source-code snippet was inspected. Not performed: full-repository review, dependency analysis, build/runtime testing, authentication-flow review, or validation of surrounding application context. Findings are diagnostic signals, not proof of exploitability or a guarantee that other issues are absent.
-{/if}
+${coverageNote}
 
 ---
 
