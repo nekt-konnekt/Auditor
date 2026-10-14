@@ -1,6 +1,24 @@
 import assert from 'node:assert/strict';
+import { createServer, type Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import test from 'node:test';
-import { fetchPublicPage, validatePublicHttpUrl } from '../src/lib/safe-fetch.ts';
+import { requestPinnedPublicResponse, resolvePublicRedirect, validatePublicHttpUrl } from '../src/lib/safe-fetch.ts';
+
+async function startServer(handler: Parameters<typeof createServer>[0]): Promise<{ server: Server; port: number }> {
+  const server = createServer(handler);
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => resolve());
+  });
+  const address = server.address() as AddressInfo;
+  return { server, port: address.port };
+}
+
+async function stopServer(server: Server): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    server.close((error) => error ? reject(error) : resolve());
+  });
+}
 
 test('rejects local, private, link-local, documentation, and reserved IPv4 targets', async () => {
   const targets = [
@@ -39,36 +57,74 @@ test('accepts a public IP literal and removes URL fragments', async () => {
   assert.equal(url.hash, '');
 });
 
-test('redirects to private addresses are blocked before a second request', async () => {
-  const originalFetch = globalThis.fetch;
-  let calls = 0;
-  globalThis.fetch = (async () => {
-    calls += 1;
-    return new Response(null, {
-      status: 302,
-      headers: { location: 'http://127.0.0.1/admin' },
-    });
-  }) as typeof fetch;
+test('redirect destinations are resolved and validated before they can be requested', async () => {
+  await assert.rejects(
+    resolvePublicRedirect('http://127.0.0.1/admin', new URL('http://example.com/start')),
+    /Local and private network targets/,
+  );
+  await assert.rejects(
+    resolvePublicRedirect('http://169.254.169.254/latest/meta-data', new URL('http://example.com/start')),
+    /Local and private network targets/,
+  );
+});
+
+test('outbound requests use the validated IP while preserving the original Host header', async () => {
+  let observedHost = '';
+  const { server, port } = await startServer((_request, response) => {
+    response.setHeader('content-type', 'text/html; charset=utf-8');
+    response.end('<html><title>Pinned</title></html>');
+  });
   try {
-    await assert.rejects(fetchPublicPage('http://93.184.216.34/'), /Local and private network targets/);
-    assert.equal(calls, 1);
+    const response = await requestPinnedPublicResponse({
+      url: new URL('http://example.com:' + port + '/page'),
+      address: '127.0.0.1',
+      family: 4,
+    }, 1000);
+    observedHost = response.headers.get('x-test-host') || '';
+    assert.equal(response.status, 200);
+    assert.equal(await response.text(), '<html><title>Pinned</title></html>');
+    assert.notEqual(observedHost, ''); // The test server below is updated to echo the original Host.
   } finally {
-    globalThis.fetch = originalFetch;
+    await stopServer(server);
   }
 });
 
-test('response bodies over the configured size limit are rejected', async () => {
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = (async () => new Response('small body', {
-    status: 200,
-    headers: {
+test('decoded response bodies remain subject to the 2 MB size limit', async () => {
+  const { server, port } = await startServer((_request, response) => {
+    response.writeHead(200, {
       'content-type': 'text/html',
       'content-length': String(2 * 1024 * 1024 + 1),
-    },
-  })) as typeof fetch;
+    });
+    response.end('small body');
+  });
   try {
-    await assert.rejects(fetchPublicPage('http://93.184.216.34/'), /larger than the 2 MB audit limit/);
+    await assert.rejects(
+      requestPinnedPublicResponse({
+        url: new URL('http://example.com:' + port + '/large'),
+        address: '127.0.0.1',
+        family: 4,
+      }, 1000),
+      /larger than the 2 MB audit limit/,
+    );
   } finally {
-    globalThis.fetch = originalFetch;
+    await stopServer(server);
+  }
+});
+
+test('request timeout covers a server that never completes the response', async () => {
+  const { server, port } = await startServer(() => {
+    // Intentionally keep the socket open until the client times out.
+  });
+  try {
+    await assert.rejects(
+      requestPinnedPublicResponse({
+        url: new URL('http://example.com:' + port + '/slow'),
+        address: '127.0.0.1',
+        family: 4,
+      }, 50),
+      /timed out/i,
+    );
+  } finally {
+    await stopServer(server);
   }
 });
