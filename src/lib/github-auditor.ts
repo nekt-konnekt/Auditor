@@ -46,10 +46,8 @@ export async function auditGitHubRepo(url: string): Promise<AuditReport> {
   };
 
   let defaultBranch = 'main';
-  let description = '';
   let license = 'None detected';
   let stars = 0;
-  let forks = 0;
   let openIssuesCount = 0;
 
   // 1. Verify that the target is an accessible public repository before auditing it.
@@ -79,10 +77,8 @@ export async function auditGitHubRepo(url: string): Promise<AuditReport> {
 
   const data = await apiRes.json();
   defaultBranch = data.default_branch;
-  description = data.description || '';
   license = data.license?.spdx_id || data.license?.name || 'Unlicensed';
   stars = data.stargazers_count ?? 0;
-  forks = data.forks_count ?? 0;
   openIssuesCount = data.open_issues_count ?? 0;
 
   metrics['Default Branch'] = defaultBranch;
@@ -177,17 +173,16 @@ export async function auditGitHubRepo(url: string): Promise<AuditReport> {
   // Check: .gitignore secret coverage
   if (gitignore) {
     const hasEnvIgnored = /^\s*\.env/m.test(gitignore);
-    const hasPemIgnored = /\.pem|\.key/m.test(gitignore);
     metrics['Secrets in .gitignore'] = hasEnvIgnored ? 'Excludes .env files' : 'No .env exclusion detected';
 
     if (!hasEnvIgnored) {
       issues.push({
         id: 'gh-gitignore-env',
         category: 'security',
-        severity: 'high',
+        severity: 'medium',
         title: 'Missing .env Exclusion in .gitignore',
-        description: 'The repository `.gitignore` does not explicitly exclude `.env` or `.env.local` environment variable files.',
-        impact: 'Developers or contributors risk inadvertently committing live API keys, JWT secrets, and database credentials to version control.',
+        description: 'The inspected `.gitignore` does not appear to exclude `.env` files. This is a preventive-hardening gap; it does not establish that secrets are present in the repository or have been exposed.',
+        impact: 'If environment files containing secrets are created and committed, credentials could be exposed. This check does not scan repository history or confirm that such files exist.',
         remediation: 'Append `.env`, `.env.*`, and `.env.local` to `.gitignore`.',
         codeSnippet: {
           original: '# Current .gitignore missing .env',
@@ -234,7 +229,7 @@ export async function auditGitHubRepo(url: string): Promise<AuditReport> {
           category: 'security',
           severity: 'medium',
           title: `Wildcard Dependency Version Ranges (${wildcardDeps.length})`,
-          description: `Dependencies using a wildcard or the `latest` tag were found: ${wildcardDeps.map(([d]) => d).join(', ')}.`,
+          description: `Dependencies using a wildcard or the latest tag were found: ${wildcardDeps.map(([d]) => d).join(', ')}.`,
           impact: 'These ranges can make dependency resolution less reproducible. This observation does not by itself establish that a package is vulnerable or that a supply-chain compromise occurred.',
           remediation: 'Prefer bounded version ranges and commit/maintain the appropriate lockfile. Use exact versions where your reproducibility policy requires them; verify actual package vulnerabilities with a dependency advisory scanner.',
         });
@@ -307,7 +302,7 @@ export async function auditGitHubRepo(url: string): Promise<AuditReport> {
   } else {
     issues.push({
       id: 'gh-readme-pass',
-      category: 'seo',
+      category: 'quality',
       severity: 'passed',
       title: 'Comprehensive README Documentation',
       description: `README is well-documented (${Math.round(readme.length / 1024)} KB).`,
