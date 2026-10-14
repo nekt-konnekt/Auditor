@@ -37,7 +37,7 @@ export async function executeAudit(payload: AuditRequestPayload): Promise<AuditR
   const createdAt = new Date().toISOString();
   const cleanTarget = (payload.target || payload.filename || '').trim();
 
-  if (payload.type === 'url' || /^https?:\/\//i.test(cleanTarget) || cleanTarget.includes('github.com')) {
+  if (payload.type === 'url') {
     if (!cleanTarget) throw new Error('A target URL or GitHub repository is required.');
     const normalizedTarget = /^https?:\/\//i.test(cleanTarget) ? cleanTarget : 'https://' + cleanTarget;
 
