@@ -218,7 +218,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
             <span className="text-xs font-medium text-slate-400 font-mono">/100</span>
           </div>
           <p className="mt-2 text-xs text-slate-500 font-mono">
-            {report.categories.security?.passedCount ?? 0} / {report.categories.security?.totalChecks ?? 0} checks passed
+            {report.categories.security?.passedCount ?? 0} / {report.categories.security?.totalChecks ?? 0} checks passed · {Math.max(0, (report.categories.security?.totalChecks ?? 0) - (report.categories.security?.passedCount ?? 0))} issues
           </p>
         </div>
 
@@ -234,7 +234,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
             <span className="text-xs font-medium text-slate-400 font-mono">/100</span>
           </div>
           <p className="mt-2 text-xs text-slate-500 font-mono">
-            {report.categories.seo?.passedCount ?? 0} / {report.categories.seo?.totalChecks ?? 0} checks passed
+            {report.categories.seo?.passedCount ?? 0} / {report.categories.seo?.totalChecks ?? 0} checks passed · {Math.max(0, (report.categories.seo?.totalChecks ?? 0) - (report.categories.seo?.passedCount ?? 0))} issues
           </p>
         </div>
 
@@ -250,7 +250,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
             <span className="text-xs font-medium text-slate-400 font-mono">/100</span>
           </div>
           <p className="mt-2 text-xs text-slate-500 font-mono">
-            {report.categories.accessibility?.passedCount ?? 0} / {report.categories.accessibility?.totalChecks ?? 0} checks passed
+            {report.categories.accessibility?.passedCount ?? 0} / {report.categories.accessibility?.totalChecks ?? 0} checks passed · {Math.max(0, (report.categories.accessibility?.totalChecks ?? 0) - (report.categories.accessibility?.passedCount ?? 0))} issues
           </p>
         </div>
 
@@ -269,9 +269,8 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
           </div>
           <p className="mt-2 text-xs text-slate-500 font-mono">
             {report.target.type === 'url'
-              ? `${report.categories.performance?.passedCount ?? 0} / ${report.categories.performance?.totalChecks ?? 0}`
-              : `${report.categories.quality?.passedCount ?? 0} / ${report.categories.quality?.totalChecks ?? 0}`}{' '}
-            checks passed
+              ? `${report.categories.performance?.passedCount ?? 0} / ${report.categories.performance?.totalChecks ?? 0} checks passed · ${Math.max(0, (report.categories.performance?.totalChecks ?? 0) - (report.categories.performance?.passedCount ?? 0))} issues`
+              : `${report.categories.quality?.passedCount ?? 0} / ${report.categories.quality?.totalChecks ?? 0} checks passed · ${Math.max(0, (report.categories.quality?.totalChecks ?? 0) - (report.categories.quality?.passedCount ?? 0))} issues`}
           </p>
         </div>
       </div>
