@@ -68,18 +68,17 @@ ${coverageNote}
 
 ## Scorecard by Category
 
-| Category | Score | Passed Checks | Status |
-| :--- | :---: | :---: | :---: |
+| Category | Score | Status |
+| :--- | :---: | :---: |
 `;
 
   Object.entries(report.categories).forEach(([catKey, catScore]) => {
     const name = categoryNameForReport(report, catKey as Category) || catKey;
     const scoreVal = catScore.totalChecks > 0 ? `${catScore.score} / 100` : 'Not assessed';
-    const checksVal = catScore.totalChecks > 0 ? `${catScore.passedCount} / ${catScore.totalChecks}` : '—';
     const status = catScore.totalChecks === 0
       ? 'Not assessed'
       : catScore.score >= 85 ? 'Fewer weighted findings' : catScore.score >= 60 ? 'Review findings' : 'Many weighted findings';
-    md += `| ${name} | ${scoreVal} | ${checksVal} | ${status} |\n`;
+    md += `| ${name} | ${scoreVal} | ${status} |\n`;
   });
 
   md += `\n---\n\n## Findings & Recommendations\n\n`;
