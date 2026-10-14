@@ -182,7 +182,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
         {/* Overall Score */}
         <div className="col-span-2 md:col-span-1 p-5 rounded-xl border border-slate-200 bg-white shadow-2xs">
           <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">
-            {isHttpErrorResponse ? 'Diagnostic Score · Error Response' : report.target.type === 'repository' ? 'Repository Hygiene Score' : report.target.type === 'code' ? 'Code Diagnostic Score' : 'Overall Health'}
+            {isHttpErrorResponse ? 'Diagnostic Score · Error Response' : report.target.type === 'repository' ? 'Repository Hygiene Score' : report.target.type === 'code' ? 'Code Diagnostic Score' : 'Website Diagnostic Score'}
           </span>
           <div className="mt-2 flex items-baseline gap-1">
             <span className="text-4xl font-extrabold text-slate-900 font-mono tabular-nums">
@@ -210,7 +210,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
         {/* Security Category */}
         <div className="p-5 rounded-xl border border-slate-200 bg-white shadow-2xs">
           <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">
-            {report.target.type === 'url' ? 'Security & Headers' : report.target.type === 'repository' ? 'Repository Security Hygiene' : 'Code Security'}
+            {report.target.type === 'url' ? 'Transport & Security Headers' : report.target.type === 'repository' ? 'Repository Security Hygiene' : 'Code Security'}
           </span>
           <div className="mt-2 flex items-baseline gap-1">
             <span className="text-3xl font-extrabold text-slate-900 font-mono tabular-nums">
@@ -228,7 +228,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
         {/* SEO Category */}
         <div className="p-5 rounded-xl border border-slate-200 bg-white shadow-2xs">
           <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">
-            {report.target.type === 'url' ? 'Search SEO' : 'SEO (Website Only)'}
+            {report.target.type === 'url' ? 'SEO Metadata' : 'SEO (Website Only)'}
           </span>
           <div className="mt-2 flex items-baseline gap-1">
             <span className="text-3xl font-extrabold text-slate-900 font-mono tabular-nums">
@@ -246,7 +246,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
         {/* Accessibility Category */}
         <div className="p-5 rounded-xl border border-slate-200 bg-white shadow-2xs">
           <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">
-            {report.target.type === 'url' ? 'Accessibility' : 'Accessibility (Website Only)'}
+            {report.target.type === 'url' ? 'HTML Accessibility Signals' : 'Accessibility (Website Only)'}
           </span>
           <div className="mt-2 flex items-baseline gap-1">
             <span className="text-3xl font-extrabold text-slate-900 font-mono tabular-nums">
@@ -264,7 +264,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
         {/* Performance / Quality Category */}
         <div className="p-5 rounded-xl border border-slate-200 bg-white shadow-2xs">
           <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">
-            {report.target.type === 'url' ? 'Performance' : report.target.type === 'repository' ? 'Repository Quality' : 'Code Quality'}
+            {report.target.type === 'url' ? 'Initial HTML Fetch' : report.target.type === 'repository' ? 'Repository Quality' : 'Code Quality'}
           </span>
           <div className="mt-2 flex items-baseline gap-1">
             <span className="text-3xl font-extrabold text-slate-900 font-mono tabular-nums">
