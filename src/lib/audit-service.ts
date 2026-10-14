@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { AuditReport, AuditRequestPayload } from '../types/audit.ts';
 import {
   calculateAuditScores,
@@ -6,92 +7,87 @@ import {
 } from './audit-rules.ts';
 import { analyzeWithGemini } from './gemini-auditor.ts';
 import { auditGitHubRepo, parseGitHubUrl } from './github-auditor.ts';
+import { fetchPublicPage } from './safe-fetch.ts';
 
-// In-memory report cache for permalinks & fast retrieval
+// In-memory cache is intentionally bounded. Durable shared links require a database.
 const reportsStore = new Map<string, AuditReport>();
+const REPORT_TTL_MS = 60 * 60 * 1000;
+const MAX_REPORTS = 100;
 
 function generateId(): string {
-  return 'aud-' + Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
+  return 'aud-' + randomUUID();
+}
+
+function storeReport(report: AuditReport): void {
+  const now = Date.now();
+  for (const [id, saved] of reportsStore) {
+    if (now - Date.parse(saved.createdAt) > REPORT_TTL_MS) reportsStore.delete(id);
+  }
+  reportsStore.delete(report.id);
+  reportsStore.set(report.id, report);
+  while (reportsStore.size > MAX_REPORTS) {
+    const oldestId = reportsStore.keys().next().value;
+    if (!oldestId) break;
+    reportsStore.delete(oldestId);
+  }
 }
 
 export async function executeAudit(payload: AuditRequestPayload): Promise<AuditReport> {
   const reportId = generateId();
   const createdAt = new Date().toISOString();
+  const cleanTarget = (payload.target || payload.filename || '').trim();
 
-  let cleanTarget = payload.target.trim();
+  if (payload.type === 'url') {
+    if (!cleanTarget) throw new Error('A target URL or GitHub repository is required.');
+    const normalizedTarget = /^https?:\/\//i.test(cleanTarget) ? cleanTarget : 'https://' + cleanTarget;
 
-  // If payload type is 'url' or looks like a link/github repo
-  if (payload.type === 'url' || cleanTarget.startsWith('http://') || cleanTarget.startsWith('https://') || cleanTarget.includes('github.com')) {
-    if (!cleanTarget.startsWith('http://') && !cleanTarget.startsWith('https://')) {
-      cleanTarget = 'https://' + cleanTarget;
-    }
-
-    // Check if it is a GitHub repository link!
-    if (parseGitHubUrl(cleanTarget)) {
-      const ghReport = await auditGitHubRepo(cleanTarget);
-      reportsStore.set(ghReport.id, ghReport);
+    if (parseGitHubUrl(normalizedTarget)) {
+      const ghReport = await auditGitHubRepo(normalizedTarget);
+      storeReport(ghReport);
       return ghReport;
     }
 
-    // Otherwise, inspect standard live website
     const startTime = Date.now();
-    let response: Response;
-    let html = '';
-    const headersMap: Record<string, string> = {};
-
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 12000);
-
-      response = await fetch(cleanTarget, {
-        method: 'GET',
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 (Auditor Engine)',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        },
-        signal: controller.signal,
-        redirect: 'follow',
-      });
-      clearTimeout(timeoutId);
-
-      response.headers.forEach((value, key) => {
-        headersMap[key.toLowerCase()] = value;
-      });
-
-      html = await response.text();
-    } catch (err: any) {
-      throw new Error(`Failed to fetch URL ${cleanTarget}: ${err.message || 'Connection refused or timeout'}`);
-    }
-
+    const { url, response, html } = await fetchPublicPage(normalizedTarget);
     const responseTimeMs = Date.now() - startTime;
-    const { issues: detIssues, metrics } = runUrlDeterministicAudit({
-      url: cleanTarget,
+    const headersMap: Record<string, string> = {};
+    response.headers.forEach((value, key) => {
+      headersMap[key.toLowerCase()] = value;
+    });
+
+    const { issues: deterministicIssues, metrics } = runUrlDeterministicAudit({
+      url: url.toString(),
       statusCode: response.status,
       headers: headersMap,
       html,
       responseTimeMs,
     });
 
-    // Run Gemini AI analysis
-    const aiResult = await analyzeWithGemini('url', cleanTarget, html, {
-      statusCode: response.status,
-      responseTimeMs,
-      headers: headersMap,
-    });
+    // Error pages are useful to inspect, but AI analysis can mistake their markup
+    // for the intended page. Keep these reports deterministic and label their limits.
+    const aiResult = response.ok
+      ? await analyzeWithGemini('url', url.toString(), html, {
+          statusCode: response.status,
+          responseTimeMs,
+          headers: headersMap,
+        })
+      : {
+          summary: `The target returned HTTP ${response.status}. This report describes the returned error response, not necessarily the intended website page. Resolve the HTTP status and rerun the audit before relying on SEO or accessibility conclusions.`,
+          additionalIssues: [],
+        };
 
-    const allIssues = [...detIssues, ...aiResult.additionalIssues];
+    const allIssues = [...deterministicIssues, ...aiResult.additionalIssues];
     const { overallScore, categories } = calculateAuditScores(allIssues);
-
     const report: AuditReport = {
       id: reportId,
       createdAt,
       target: {
         type: 'url',
-        target: cleanTarget,
+        target: url.toString(),
         statusCode: response.status,
         contentType: response.headers.get('content-type') || 'text/html',
         responseTimeMs,
-        resourceSizeKb: Math.round((html.length / 1024) * 10) / 10,
+        resourceSizeKb: Math.round((new TextEncoder().encode(html).byteLength / 1024) * 10) / 10,
       },
       overallScore,
       categories,
@@ -100,58 +96,51 @@ export async function executeAudit(payload: AuditRequestPayload): Promise<AuditR
       metrics,
     };
 
-    reportsStore.set(reportId, report);
-    return report;
-  } else {
-    // Direct Source Code Audit
-    const code = payload.code || '';
-    const filename = payload.filename || cleanTarget || 'source-file';
-    const language = payload.language || 'typescript';
-
-    if (!code.trim()) {
-      throw new Error('Code content cannot be empty.');
-    }
-
-    const { issues: detIssues, metrics } = runCodeDeterministicAudit({
-      code,
-      language,
-      filename,
-    });
-
-    const aiResult = await analyzeWithGemini('code', filename, code, {
-      language,
-      filename,
-    });
-
-    const allIssues = [...detIssues, ...aiResult.additionalIssues];
-    const { overallScore, categories } = calculateAuditScores(allIssues);
-
-    const report: AuditReport = {
-      id: reportId,
-      createdAt,
-      target: {
-        type: 'code',
-        target: filename,
-        language,
-        filename,
-        resourceSizeKb: Math.round((code.length / 1024) * 10) / 10,
-      },
-      overallScore,
-      categories,
-      summary: aiResult.summary,
-      issues: allIssues,
-      metrics,
-    };
-
-    reportsStore.set(reportId, report);
+    storeReport(report);
     return report;
   }
+
+  const code = payload.code || '';
+  const filename = payload.filename || cleanTarget || 'source-file';
+  const language = payload.language || 'text';
+  if (!code.trim()) throw new Error('Source code content cannot be empty.');
+  if (code.length > 200_000) throw new Error('Source code is limited to 200,000 characters per audit.');
+
+  const { issues: deterministicIssues, metrics } = runCodeDeterministicAudit({ code, language, filename });
+  const aiResult = await analyzeWithGemini('code', filename, code, { language, filename });
+  const allIssues = [...deterministicIssues, ...aiResult.additionalIssues];
+  const { overallScore, categories } = calculateAuditScores(allIssues);
+  const report: AuditReport = {
+    id: reportId,
+    createdAt,
+    target: {
+      type: 'code',
+      target: filename,
+      language,
+      filename,
+      resourceSizeKb: Math.round((new TextEncoder().encode(code).byteLength / 1024) * 10) / 10,
+    },
+    overallScore,
+    categories,
+    summary: aiResult.summary,
+    issues: allIssues,
+    metrics,
+  };
+
+  storeReport(report);
+  return report;
 }
 
 export function getReportById(id: string): AuditReport | null {
-  return reportsStore.get(id) || null;
+  const report = reportsStore.get(id);
+  if (!report) return null;
+  if (Date.now() - Date.parse(report.createdAt) > REPORT_TTL_MS) {
+    reportsStore.delete(id);
+    return null;
+  }
+  return report;
 }
 
 export function saveReport(report: AuditReport): void {
-  reportsStore.set(report.id, report);
+  storeReport(report);
 }

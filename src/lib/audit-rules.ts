@@ -58,6 +58,7 @@ export function runUrlDeterministicAudit(input: UrlAuditInput): {
 
   // Check 2: Content-Security-Policy
   const csp = headers['content-security-policy'];
+  const weakCspPattern = /(?:unsafe-inline|unsafe-eval|(?:script-src|default-src)\s+[^;]*\*)/i;
   metrics['CSP Present'] = !!csp;
   if (!csp) {
     issues.push({
@@ -69,6 +70,18 @@ export function runUrlDeterministicAudit(input: UrlAuditInput): {
       impact: 'Significantly increases vulnerability to Cross-Site Scripting (XSS), clickjacking, and data injection attacks.',
       remediation: "Configure the 'Content-Security-Policy' header to restrict script-src, object-src, and frame-ancestors to trusted origins only.",
       evidence: 'Header missing from response headers.',
+      references: [{ title: 'OWASP CSP Cheat Sheet', url: 'https://cheatsheetseries.owasp.org/cheatsheets/Content_Security_Policy_Cheat_Sheet.html' }],
+    });
+  } else if (weakCspPattern.test(csp)) {
+    issues.push({
+      id: 'sec-csp-weak',
+      category: 'security',
+      severity: 'medium',
+      title: 'Content-Security-Policy May Be Too Permissive',
+      description: 'The policy contains broad wildcards or unsafe script directives. Header presence alone does not establish an effective CSP.',
+      impact: 'A permissive policy can reduce protection against injected scripts and unintended resource loading.',
+      remediation: 'Review each directive, restrict script-src and default-src to trusted sources, remove unsafe-inline/unsafe-eval where practical, and define frame-ancestors explicitly.',
+      evidence: csp.substring(0, 240) + (csp.length > 240 ? '...' : ''),
       references: [{ title: 'OWASP CSP Cheat Sheet', url: 'https://cheatsheetseries.owasp.org/cheatsheets/Content_Security_Policy_Cheat_Sheet.html' }],
     });
   } else {
@@ -401,11 +414,11 @@ export function runUrlDeterministicAudit(input: UrlAuditInput): {
     issues.push({
       id: 'a11y-h1-missing',
       category: 'accessibility',
-      severity: 'high',
+      severity: 'medium',
       title: 'Missing <h1> Primary Heading',
-      description: 'The page does not contain a single <h1> heading element.',
-      impact: 'Screen reader users navigating by headings cannot identify the primary topic; hurts SEO document structure.',
-      remediation: 'Include exactly one prominent <h1> heading that encapsulates the page topic.',
+      description: 'No <h1> element was found in the returned HTML. This is a document-structure signal, not by itself proof of an accessibility failure.',
+      impact: 'A primary heading can help users, including screen-reader users, understand the page topic and navigate its structure.',
+      remediation: 'Add a descriptive top-level heading where it reflects the page content, and verify the complete heading hierarchy.',
     });
   } else if (h1Count > 1) {
     issues.push({
@@ -430,22 +443,26 @@ export function runUrlDeterministicAudit(input: UrlAuditInput): {
   }
 
   // 4. PERFORMANCE & RESOURCE HYGIENE
-  const htmlSizeKb = Math.round((input.html.length / 1024) * 10) / 10;
+  const htmlSizeKb = Math.round((new TextEncoder().encode(input.html).byteLength / 1024) * 10) / 10;
   const scriptTags = $('script[src]').length;
   const styleTags = $('link[rel="stylesheet"]').length;
-  metrics['HTML Size'] = `${htmlSizeKb} KB`;
+  metrics['Decoded HTML Size'] = `${htmlSizeKb} KB`;
   metrics['External Scripts'] = scriptTags;
   metrics['External Stylesheets'] = styleTags;
-  metrics['Response Time'] = `${input.responseTimeMs} ms`;
+  metrics['HTML Fetch Duration'] = `${input.responseTimeMs} ms`;
+  metrics['Browser Runtime Checks'] = 'Not performed';
+  metrics['Route Coverage'] = 'Submitted URL only';
+  metrics['HTTP Status'] = input.statusCode;
+  metrics['HTTP Status Class'] = `${Math.floor(input.statusCode / 100)}xx`;
 
   if (input.responseTimeMs > 2000) {
     issues.push({
       id: 'perf-slow-ttfb',
       category: 'performance',
       severity: 'high',
-      title: `Slow Server Initial Response Time (${input.responseTimeMs}ms)`,
-      description: 'The time to first byte and initial document fetch exceeded 2.0 seconds.',
-      impact: 'Poor user experience, high bounce rates, and lower Core Web Vitals (LCP) scores.',
+      title: `Slow Initial HTML Fetch Duration (${input.responseTimeMs}ms)`,
+      description: 'The initial HTML request and response-body read took more than 2.0 seconds. This is not a pure time-to-first-byte or browser-rendering measurement.',
+      impact: 'A slow initial HTML fetch can delay the start of rendering and may indicate origin, network, or payload-size overhead.',
       remediation: 'Enable edge caching (CDN), server-side caching, or optimize database queries and server compute.',
     });
   } else if (input.responseTimeMs > 800) {
@@ -453,8 +470,8 @@ export function runUrlDeterministicAudit(input: UrlAuditInput): {
       id: 'perf-moderate-ttfb',
       category: 'performance',
       severity: 'medium',
-      title: `Sub-optimal Server Response Time (${input.responseTimeMs}ms)`,
-      description: 'Response time is between 800ms and 2000ms.',
+      title: `Sub-optimal Initial HTML Fetch Duration (${input.responseTimeMs}ms)`,
+      description: 'Initial HTML fetch duration is between 800ms and 2000ms, including reading the response body; it is not a pure time-to-first-byte measurement.',
       remediation: 'Implement HTTP compression (gzip/brotli) and CDN caching.',
     });
   } else {
@@ -462,8 +479,8 @@ export function runUrlDeterministicAudit(input: UrlAuditInput): {
       id: 'perf-ttfb-pass',
       category: 'performance',
       severity: 'passed',
-      title: `Fast Initial Server Response (${input.responseTimeMs}ms)`,
-      description: 'Server responded quickly within acceptable latency thresholds (<800ms).',
+      title: `Fast Initial HTML Fetch (${input.responseTimeMs}ms)`,
+      description: 'The initial HTML response and body were fetched within the 800ms threshold. This does not measure browser rendering or real-user performance.',
       remediation: 'Maintain CDN and caching layers.',
     });
   }
@@ -477,6 +494,30 @@ export function runUrlDeterministicAudit(input: UrlAuditInput): {
       description: 'The initial HTML payload exceeds 500 KB, indicating large inline blobs, huge state hydration, or base64 data.',
       impact: 'Increases cellular data consumption and delays DOM parsing.',
       remediation: 'Externalize large inline assets, lazy-load heavy subtrees, and enable Brotli/Gzip compression.',
+    });
+  }
+
+  if (input.statusCode >= 500) {
+    issues.push({
+      id: 'http-server-error',
+      category: 'performance',
+      severity: 'critical',
+      title: `Server Error Response (HTTP ${input.statusCode})`,
+      description: `The target returned HTTP ${input.statusCode}. Auditor inspected the returned error response, which may not represent the intended website page.`,
+      impact: 'Visitors and search crawlers may be unable to access the intended page while the server error persists.',
+      remediation: 'Investigate the origin or hosting logs, verify upstream dependencies, and repeat the audit after the endpoint returns a successful response.',
+      evidence: `HTTP ${input.statusCode}`,
+    });
+  } else if (input.statusCode >= 400) {
+    issues.push({
+      id: 'http-client-error',
+      category: 'performance',
+      severity: 'high',
+      title: `Client Error Response (HTTP ${input.statusCode})`,
+      description: `The target returned HTTP ${input.statusCode}. SEO and accessibility observations apply to this response body and may not represent the intended page.`,
+      impact: 'The requested resource may be missing, blocked, or inaccessible to visitors and search crawlers.',
+      remediation: 'Confirm the URL and routing, inspect access controls, and repeat the audit against the intended canonical page.',
+      evidence: `HTTP ${input.statusCode}`,
     });
   }
 
