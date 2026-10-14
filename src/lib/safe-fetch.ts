@@ -157,7 +157,7 @@ export async function requestPinnedPublicResponse(target: ResolvedPublicTarget, 
     const requestOptions: Record<string, unknown> = {
       method: 'GET',
       headers: {
-        'User-Agent': 'Auditor-Engine/1.0 (+website audit; contact: security@auditor.invalid)',
+        'User-Agent': 'Auditor-Engine/1.0',
         Accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.5',
         'Accept-Encoding': 'gzip, deflate, br',
       },
