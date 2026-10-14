@@ -132,7 +132,10 @@ export function runUrlDeterministicAudit(input: UrlAuditInput): {
   const xfo = headers['x-frame-options'];
   const validXfo = Boolean(xfo && /^(DENY|SAMEORIGIN)$/i.test(xfo.trim()));
   const frameAncestorsDirective = csp?.split(';').map((part) => part.trim())
-    .find((part) => /^frame-ancestors\s+\S+/i.test(part));
+    .find((part) => {
+      const match = part.match(/^frame-ancestors\s+(.+)$/i);
+      return Boolean(match && !match[1].trim().split(/\s+/).includes('*'));
+    });
   const hasFrameProtection = validXfo || Boolean(frameAncestorsDirective);
   metrics['X-Frame-Options'] = xfo || 'Not set';
   if (!hasFrameProtection) {
@@ -218,7 +221,7 @@ export function runUrlDeterministicAudit(input: UrlAuditInput): {
       severity: 'medium',
       title: 'Page Title is Sub-optimally Short',
       description: `Current title is only ${title.length} characters long: "${title}".`,
-      impact: 'Fails to capitalize on search keyword density and search result real estate.',
+      impact: 'A short title may omit useful page or brand context; length alone does not determine title quality.',
       remediation: 'Expand the title to 30–60 characters to include primary brand and page intent keywords.',
       evidence: title,
     });
@@ -229,7 +232,7 @@ export function runUrlDeterministicAudit(input: UrlAuditInput): {
       severity: 'low',
       title: 'Page Title May Be Truncated in SERPs',
       description: `Current title is ${title.length} characters long and exceeds standard 60-character search snippets.`,
-      impact: 'Search engines will truncate the title with an ellipsis (...), hiding key terms.',
+      impact: 'Long titles may be truncated or rewritten in some search results; this is not guaranteed for every query or search engine.',
       remediation: 'Condense title to under 60 characters.',
       evidence: title,
     });
@@ -265,8 +268,8 @@ export function runUrlDeterministicAudit(input: UrlAuditInput): {
       category: 'seo',
       severity: 'low',
       title: `Meta Description Length Sub-optimal (${metaDesc.length} chars)`,
-      description: 'Meta descriptions perform best when kept between 70 and 160 characters.',
-      remediation: 'Tune description length to 120–155 characters for optimal snippet presentation.',
+      description: 'This heuristic flags descriptions outside the configured 50–165 character range. Search engines do not guarantee a fixed display length.',
+      remediation: 'Review whether the description is concise and useful for the page; treat character counts as a guideline, not a ranking rule.',
       evidence: metaDesc,
     });
   } else {
@@ -291,7 +294,7 @@ export function runUrlDeterministicAudit(input: UrlAuditInput): {
       severity: 'medium',
       title: 'Missing Rel Canonical Link',
       description: 'No canonical URL tag (<link rel="canonical">) was detected.',
-      impact: 'Duplicate URL parameters (tracking tags, query strings, protocol variations) can dilute search ranking signals.',
+      impact: 'If multiple URLs serve substantially similar content, a canonical declaration can help communicate the preferred URL. This check did not establish that duplicate URLs exist.',
       remediation: 'Add `<link rel="canonical" href="https://example.com/page" />` inside the `<head>`.',
     });
   } else {
@@ -300,7 +303,7 @@ export function runUrlDeterministicAudit(input: UrlAuditInput): {
       category: 'seo',
       severity: 'passed',
       title: 'Canonical Link Declared',
-      description: 'Search engines are given an explicit preferred URL for indexation.',
+      description: 'A canonical href was observed; Auditor did not verify URL reachability, same-host suitability, or consistency with other pages.',
       evidence: canonical,
       remediation: 'Verify canonical URL matches primary canonical host.',
     });
@@ -317,7 +320,7 @@ export function runUrlDeterministicAudit(input: UrlAuditInput): {
       severity: 'medium',
       title: 'Incomplete Social Media OpenGraph Tags',
       description: `Missing essential social cards (${!ogTitle ? 'og:title ' : ''}${!ogImage ? 'og:image' : ''}).`,
-      impact: 'Links shared on LinkedIn, Twitter, Slack, and Facebook will display plain text or broken card previews.',
+      impact: 'Some sharing platforms may show incomplete or less predictable previews when these tags are absent; actual preview rendering was not tested.',
       remediation: 'Add `og:title`, `og:description`, `og:image`, and `og:url` tags to optimize social sharing CTR.',
     });
   } else {
@@ -325,8 +328,8 @@ export function runUrlDeterministicAudit(input: UrlAuditInput): {
       id: 'seo-og-pass',
       category: 'seo',
       severity: 'passed',
-      title: 'OpenGraph Social Card Meta Ready',
-      description: 'og:title and og:image are properly declared.',
+      title: 'OpenGraph Title and Image Tags Declared',
+      description: 'og:title and og:image tags are present. Their URLs, image accessibility, and actual platform preview rendering were not validated.',
       evidence: `og:title="${ogTitle}"`,
       remediation: 'Test social card preview rendering.',
     });
