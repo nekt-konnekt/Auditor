@@ -37,7 +37,6 @@ export async function auditGitHubRepo(url: string): Promise<AuditReport> {
   const fullName = `${owner}/${repo}`;
   const reportId = 'gh-' + Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
   const createdAt = new Date().toISOString();
-  const startTime = Date.now();
 
   const issues: AuditIssue[] = [];
   const metrics: Record<string, string | number | boolean> = {
@@ -339,8 +338,6 @@ export async function auditGitHubRepo(url: string): Promise<AuditReport> {
   const allIssues = issues;
   const { overallScore, categories } = calculateAuditScores(allIssues);
 
-  const responseTimeMs = Date.now() - startTime;
-
   return {
     id: reportId,
     createdAt,
@@ -348,14 +345,10 @@ export async function auditGitHubRepo(url: string): Promise<AuditReport> {
       type: 'repository',
       target: `https://github.com/${fullName}`,
       filename: fullName,
-      statusCode: 200,
-      responseTimeMs,
-      contentType: 'application/vnd.github.v3+json',
-      resourceSizeKb: Math.round(((readme?.length || 0) + (packageJson?.length || 0)) / 1024),
     },
     overallScore,
     categories,
-    summary: `Repository hygiene review of ${fullName}. Auditor inspected public repository metadata and selected root-level files on the default branch (including SECURITY.md, .gitignore, package.json, README.md, and common license filenames). It did not scan all source files, repository history, secrets across the full tree, dependency advisories, deployed runtime behavior, or private content. Treat findings as limited observations, not a complete security audit.`,
+    summary: `Repository hygiene review of ${fullName}. Auditor inspected public repository metadata and selected policy/configuration/documentation files from the default branch (including security-policy locations, .gitignore, package.json, README variants, and common license filenames). It did not scan all source files, repository history, secrets across the full tree, dependency advisories, deployed runtime behavior, or private content. Treat findings as limited observations, not a complete security audit.`,
     issues: allIssues,
     metrics,
   };
