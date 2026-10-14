@@ -95,12 +95,13 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
   };
 
   const targetLabel =
-    report.target.type === 'url'
+    report.target.type === 'url' || report.target.type === 'repository'
       ? report.target.target
       : report.target.filename || 'Source Code File';
   const isHttpErrorResponse = report.target.type === 'url'
     && typeof report.target.statusCode === 'number'
     && report.target.statusCode >= 400;
+  const primaryCategory = report.target.type === 'url' ? report.categories.performance : report.categories.quality;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
@@ -181,7 +182,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
         {/* Overall Score */}
         <div className="col-span-2 md:col-span-1 p-5 rounded-xl border border-slate-200 bg-white shadow-2xs">
           <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">
-            {isHttpErrorResponse ? 'Diagnostic Score · Error Response' : 'Overall Health'}
+            {isHttpErrorResponse ? 'Diagnostic Score · Error Response' : report.target.type === 'repository' ? 'Repository Hygiene Score' : report.target.type === 'code' ? 'Code Diagnostic Score' : 'Website Diagnostic Score'}
           </span>
           <div className="mt-2 flex items-baseline gap-1">
             <span className="text-4xl font-extrabold text-slate-900 font-mono tabular-nums">
@@ -209,68 +210,72 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
         {/* Security Category */}
         <div className="p-5 rounded-xl border border-slate-200 bg-white shadow-2xs">
           <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">
-            Security & Headers
+            {report.target.type === 'url' ? 'Transport & Security Headers' : report.target.type === 'repository' ? 'Repository Security Hygiene' : 'Code Security'}
           </span>
           <div className="mt-2 flex items-baseline gap-1">
             <span className="text-3xl font-extrabold text-slate-900 font-mono tabular-nums">
-              {report.categories.security?.score ?? 100}
+              {(report.categories.security?.totalChecks ?? 0) > 0 ? report.categories.security?.score : '—'}
             </span>
-            <span className="text-xs font-medium text-slate-400 font-mono">/100</span>
+            {(report.categories.security?.totalChecks ?? 0) > 0 && <span className="text-xs font-medium text-slate-400 font-mono">/100</span>}
           </div>
           <p className="mt-2 text-xs text-slate-500 font-mono">
-            {report.categories.security?.passedCount ?? 0} / {report.categories.security?.totalChecks ?? 0} checks passed · {Math.max(0, (report.categories.security?.totalChecks ?? 0) - (report.categories.security?.passedCount ?? 0))} issues
+            {(report.categories.security?.totalChecks ?? 0) > 0
+              ? `${report.categories.security?.totalChecks ?? 0} recorded observations · ${Math.max(0, (report.categories.security?.totalChecks ?? 0) - (report.categories.security?.passedCount ?? 0))} potential findings`
+              : 'Not assessed — no checks in this audit mode'}
           </p>
         </div>
 
         {/* SEO Category */}
         <div className="p-5 rounded-xl border border-slate-200 bg-white shadow-2xs">
           <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">
-            Search SEO
+            {report.target.type === 'url' ? 'SEO Metadata' : 'SEO (Website Only)'}
           </span>
           <div className="mt-2 flex items-baseline gap-1">
             <span className="text-3xl font-extrabold text-slate-900 font-mono tabular-nums">
-              {report.categories.seo?.score ?? 100}
+              {(report.categories.seo?.totalChecks ?? 0) > 0 ? report.categories.seo?.score : '—'}
             </span>
-            <span className="text-xs font-medium text-slate-400 font-mono">/100</span>
+            {(report.categories.seo?.totalChecks ?? 0) > 0 && <span className="text-xs font-medium text-slate-400 font-mono">/100</span>}
           </div>
           <p className="mt-2 text-xs text-slate-500 font-mono">
-            {report.categories.seo?.passedCount ?? 0} / {report.categories.seo?.totalChecks ?? 0} checks passed · {Math.max(0, (report.categories.seo?.totalChecks ?? 0) - (report.categories.seo?.passedCount ?? 0))} issues
+            {(report.categories.seo?.totalChecks ?? 0) > 0
+              ? `${report.categories.seo?.totalChecks ?? 0} recorded observations · ${Math.max(0, (report.categories.seo?.totalChecks ?? 0) - (report.categories.seo?.passedCount ?? 0))} potential findings`
+              : 'Not assessed — no checks in this audit mode'}
           </p>
         </div>
 
         {/* Accessibility Category */}
         <div className="p-5 rounded-xl border border-slate-200 bg-white shadow-2xs">
           <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">
-            Accessibility
+            {report.target.type === 'url' ? 'HTML Accessibility Signals' : 'Accessibility (Website Only)'}
           </span>
           <div className="mt-2 flex items-baseline gap-1">
             <span className="text-3xl font-extrabold text-slate-900 font-mono tabular-nums">
-              {report.categories.accessibility?.score ?? 100}
+              {(report.categories.accessibility?.totalChecks ?? 0) > 0 ? report.categories.accessibility?.score : '—'}
             </span>
-            <span className="text-xs font-medium text-slate-400 font-mono">/100</span>
+            {(report.categories.accessibility?.totalChecks ?? 0) > 0 && <span className="text-xs font-medium text-slate-400 font-mono">/100</span>}
           </div>
           <p className="mt-2 text-xs text-slate-500 font-mono">
-            {report.categories.accessibility?.passedCount ?? 0} / {report.categories.accessibility?.totalChecks ?? 0} checks passed · {Math.max(0, (report.categories.accessibility?.totalChecks ?? 0) - (report.categories.accessibility?.passedCount ?? 0))} issues
+            {(report.categories.accessibility?.totalChecks ?? 0) > 0
+              ? `${report.categories.accessibility?.totalChecks ?? 0} recorded observations · ${Math.max(0, (report.categories.accessibility?.totalChecks ?? 0) - (report.categories.accessibility?.passedCount ?? 0))} potential findings`
+              : 'Not assessed — no checks in this audit mode'}
           </p>
         </div>
 
         {/* Performance / Quality Category */}
         <div className="p-5 rounded-xl border border-slate-200 bg-white shadow-2xs">
           <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">
-            {report.target.type === 'url' ? 'Performance' : 'Code Quality'}
+            {report.target.type === 'url' ? 'Initial HTML Fetch' : report.target.type === 'repository' ? 'Repository Quality' : 'Code Quality'}
           </span>
           <div className="mt-2 flex items-baseline gap-1">
             <span className="text-3xl font-extrabold text-slate-900 font-mono tabular-nums">
-              {report.target.type === 'url'
-                ? report.categories.performance?.score ?? 100
-                : report.categories.quality?.score ?? 100}
+              {(primaryCategory?.totalChecks ?? 0) > 0 ? primaryCategory?.score : '—'}
             </span>
-            <span className="text-xs font-medium text-slate-400 font-mono">/100</span>
+            {(primaryCategory?.totalChecks ?? 0) > 0 && <span className="text-xs font-medium text-slate-400 font-mono">/100</span>}
           </div>
           <p className="mt-2 text-xs text-slate-500 font-mono">
-            {report.target.type === 'url'
-              ? `${report.categories.performance?.passedCount ?? 0} / ${report.categories.performance?.totalChecks ?? 0} checks passed · ${Math.max(0, (report.categories.performance?.totalChecks ?? 0) - (report.categories.performance?.passedCount ?? 0))} issues`
-              : `${report.categories.quality?.passedCount ?? 0} / ${report.categories.quality?.totalChecks ?? 0} checks passed · ${Math.max(0, (report.categories.quality?.totalChecks ?? 0) - (report.categories.quality?.passedCount ?? 0))} issues`}
+            {(primaryCategory?.totalChecks ?? 0) > 0
+              ? `${primaryCategory?.totalChecks ?? 0} recorded observations · ${Math.max(0, (primaryCategory?.totalChecks ?? 0) - (primaryCategory?.passedCount ?? 0))} potential findings`
+              : 'Not assessed — no checks in this audit mode'}
           </p>
         </div>
       </div>
@@ -283,7 +288,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
         <p className="text-sm text-slate-700 leading-relaxed">
           {report.summary}
         </p>
-        <p className="mt-3 text-xs leading-relaxed text-slate-500">Not performed: browser rendering tests, Core Web Vitals or real-user performance measurement, authenticated-flow checks, and audits of other routes. This report evaluates the listed rules against the submitted URL's fetched response; it is not a guarantee of overall security or accessibility.</p>
+        <p className="mt-3 text-xs leading-relaxed text-slate-500">{report.target.type === 'url' ? 'Not performed: browser rendering tests, Core Web Vitals or real-user performance measurement, authenticated-flow checks, and audits of other routes. This report evaluates listed rules against the submitted URL response; it is not a guarantee of overall security or accessibility.' : report.target.type === 'repository' ? 'Coverage: public repository metadata and selected policy/configuration/documentation files from the default branch only. Not performed: full source-tree or git-history scanning, secret scanning across all files, dependency vulnerability database checks, private repository review, or deployed runtime testing. This is a repository-hygiene review, not a complete security audit.' : 'Coverage: only the supplied source-code snippet was inspected. Not performed: full-repository review, dependency analysis, build/runtime testing, authentication-flow review, or validation of surrounding application context. Findings are diagnostic signals, not proof of exploitability or a guarantee that other issues are absent.'}</p>
 
         {report.metrics && Object.keys(report.metrics).length > 0 && (
           <div className="mt-5 pt-4 border-t border-slate-100 flex flex-wrap gap-x-6 gap-y-2 text-xs text-slate-600 font-mono">

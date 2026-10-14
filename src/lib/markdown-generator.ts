@@ -1,7 +1,7 @@
 import { AuditReport, Category, Severity } from '../types/audit.ts';
 
 const CATEGORY_NAMES: Record<Category, string> = {
-  security: 'Security & Headers',
+  security: 'Transport & Security Headers',
   seo: 'Search Engine Optimization (SEO)',
   accessibility: 'Accessibility & Semantics',
   performance: 'Performance & Architecture',
@@ -16,14 +16,35 @@ const SEVERITY_BADGES: Record<Severity, string> = {
   passed: '[PASSED]',
 };
 
+function categoryNameForReport(report: AuditReport, category: Category): string {
+  if (report.target.type === 'repository') {
+    if (category === 'security') return 'Repository Security Hygiene';
+    if (category === 'quality') return 'Repository Quality';
+    return `${CATEGORY_NAMES[category]} (website-only; not assessed)`;
+  }
+  if (report.target.type === 'code') {
+    if (category === 'security') return 'Code Security';
+    if (category === 'quality') return 'Code Quality';
+    return `${CATEGORY_NAMES[category]} (not assessed for source snippet)`;
+  }
+  return CATEGORY_NAMES[category];
+}
+
 export function generateAuditMarkdown(report: AuditReport): string {
   const dateFormatted = new Date(report.createdAt).toUTCString();
-  const targetLabel = report.target.type === 'url' ? report.target.target : (report.target.filename || 'Code Snippet');
+  const targetLabel = report.target.type === 'url' || report.target.type === 'repository'
+    ? report.target.target
+    : (report.target.filename || 'Code Snippet');
 
   const isHttpErrorResponse = report.target.type === 'url'
     && typeof report.target.statusCode === 'number'
     && report.target.statusCode >= 400;
-  const scoreLabel = isHttpErrorResponse ? 'Diagnostic Score (Error Response)' : 'Severity-weighted Diagnostic Score';
+  const scoreLabel = isHttpErrorResponse ? 'Diagnostic Score (Error Response)' : report.target.type === 'repository' ? 'Repository Hygiene Diagnostic Score' : report.target.type === 'code' ? 'Source Snippet Diagnostic Score' : 'Website Snapshot Diagnostic Score';
+  const coverageNote = report.target.type === 'url'
+    ? '> Not performed: browser rendering tests, Core Web Vitals or real-user performance measurement, authenticated-flow checks, and audits of other routes. This report evaluates listed rules against the submitted URL response; it is not a guarantee of overall security or accessibility.'
+    : report.target.type === 'repository'
+      ? '> Coverage: public repository metadata and selected policy/configuration/documentation files from the default branch only. Not performed: full source-tree or git-history scanning, secret scanning across all files, dependency vulnerability database checks, private repository review, or deployed runtime testing. This is a repository-hygiene review, not a complete security audit.'
+      : '> Coverage: only the supplied source-code snippet was inspected. Not performed: full-repository review, dependency analysis, build/runtime testing, authentication-flow review, or validation of surrounding application context. Findings are diagnostic signals, not proof of exploitability or a guarantee that other issues are absent.';
 
   let md = `# Audit Report: ${targetLabel}
 
@@ -43,22 +64,23 @@ ${isHttpErrorResponse ? `\n> **Target returned HTTP ${report.target.statusCode}.
 
 ${report.summary}
 
-> Not performed: browser rendering tests, Core Web Vitals or real-user performance measurement, authenticated-flow checks, and audits of other routes. This report evaluates the listed rules against the submitted URL's fetched response; it is not a guarantee of overall security or accessibility.
+${coverageNote}
 
 ---
 
 ## Scorecard by Category
 
-| Category | Score | Passed Checks | Status |
-| :--- | :---: | :---: | :---: |
+| Category | Score | Status |
+| :--- | :---: | :---: |
 `;
 
   Object.entries(report.categories).forEach(([catKey, catScore]) => {
-    const name = CATEGORY_NAMES[catKey as Category] || catKey;
-    const scoreVal = `${catScore.score} / 100`;
-    const checksVal = `${catScore.passedCount} / ${catScore.totalChecks}`;
-    const status = catScore.score >= 85 ? 'Healthy' : catScore.score >= 60 ? 'Needs Attention' : 'Vulnerable';
-    md += `| ${name} | ${scoreVal} | ${checksVal} | ${status} |\n`;
+    const name = categoryNameForReport(report, catKey as Category) || catKey;
+    const scoreVal = catScore.totalChecks > 0 ? `${catScore.score} / 100` : 'Not assessed';
+    const status = catScore.totalChecks === 0
+      ? 'Not assessed'
+      : catScore.score >= 85 ? 'Fewer weighted findings' : catScore.score >= 60 ? 'Review findings' : 'Many weighted findings';
+    md += `| ${name} | ${scoreVal} | ${status} |\n`;
   });
 
   md += `\n---\n\n## Findings & Recommendations\n\n`;
@@ -75,7 +97,7 @@ ${report.summary}
     const list = issuesGroupedByCat[cat];
     if (!list || list.length === 0) return;
 
-    md += `### ${CATEGORY_NAMES[cat]}\n\n`;
+    md += `### ${categoryNameForReport(report, cat)}\n\n`;
 
     list.forEach((issue, idx) => {
       const badge = SEVERITY_BADGES[issue.severity];

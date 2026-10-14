@@ -38,11 +38,11 @@ export function runUrlDeterministicAudit(input: UrlAuditInput): {
     issues.push({
       id: 'sec-https',
       category: 'security',
-      severity: 'critical',
+      severity: 'high',
       title: 'Insecure HTTP Transport Protocol',
-      description: 'The target website is serving traffic over plaintext HTTP without TLS encryption.',
-      impact: 'Allows man-in-the-middle (MITM) attackers to sniff credentials, inject malicious scripts, or tamper with data in transit.',
-      remediation: 'Obtain an SSL/TLS certificate (e.g., via Let’s Encrypt) and enforce automatic HTTP-to-HTTPS 301 redirection on your web server.',
+      description: 'The submitted URL uses plaintext HTTP, so this request is not protected by TLS. This observation describes transport security; it does not establish what data the site handles or whether a specific attack is exploitable.',
+      impact: 'Traffic can be read or modified by an on-path attacker. The practical impact depends on the content and functionality served; sensitive forms, sessions, or data should not be sent over HTTP.',
+      remediation: 'For a conventional public website, configure HTTPS and redirect HTTP requests to HTTPS. Some narrowly scoped services intentionally use HTTP for captive-portal detection; document that exception and do not send sensitive data over that endpoint.',
       references: [{ title: 'MDN: Transport Layer Security', url: 'https://developer.mozilla.org/en-US/docs/Glossary/TLS' }],
     });
   } else {
@@ -58,16 +58,16 @@ export function runUrlDeterministicAudit(input: UrlAuditInput): {
 
   // Check 2: Content-Security-Policy
   const csp = headers['content-security-policy'];
-  const weakCspPattern = /(?:unsafe-inline|unsafe-eval|(?:script-src|default-src)\s+[^;]*\*)/i;
+  const weakCspPattern = /(?:^|;)\s*(?:script-src|default-src)\s+[^;]*(?:'unsafe-inline'|'unsafe-eval'|\*)/i;
   metrics['CSP Present'] = !!csp;
   if (!csp) {
     issues.push({
       id: 'sec-csp',
       category: 'security',
-      severity: 'high',
+      severity: 'medium',
       title: 'Missing Content-Security-Policy (CSP) Header',
-      description: 'The HTTP response is missing a Content-Security-Policy header to restrict resource loading.',
-      impact: 'Significantly increases vulnerability to Cross-Site Scripting (XSS), clickjacking, and data injection attacks.',
+      description: 'No Content-Security-Policy header was observed in this response. CSP is a defense-in-depth control; its absence alone does not establish that an XSS vulnerability exists.',
+      impact: 'Without CSP, the browser has fewer policy-based restrictions if a separate injection flaw is present.',
       remediation: "Configure the 'Content-Security-Policy' header to restrict script-src, object-src, and frame-ancestors to trusted origins only.",
       evidence: 'Header missing from response headers.',
       references: [{ title: 'OWASP CSP Cheat Sheet', url: 'https://cheatsheetseries.owasp.org/cheatsheets/Content_Security_Policy_Cheat_Sheet.html' }],
@@ -89,8 +89,8 @@ export function runUrlDeterministicAudit(input: UrlAuditInput): {
       id: 'sec-csp-pass',
       category: 'security',
       severity: 'passed',
-      title: 'Content-Security-Policy Configured',
-      description: 'The website supplies a Content-Security-Policy header.',
+      title: 'Content-Security-Policy Header Present',
+      description: 'A CSP header was observed and this simple heuristic did not match broad script/default-source patterns. This is not a full policy validator or proof that the policy is effective.',
       evidence: csp.substring(0, 80) + (csp.length > 80 ? '...' : ''),
       remediation: 'Ensure directives are restrictive and avoid "unsafe-inline" where possible.',
     });
@@ -98,58 +98,77 @@ export function runUrlDeterministicAudit(input: UrlAuditInput): {
 
   // Check 3: Strict-Transport-Security (HSTS)
   const hsts = headers['strict-transport-security'];
-  metrics['HSTS Present'] = !!hsts;
-  if (!hsts) {
+  const hstsMaxAge = hsts?.match(/(?:^|;)\s*max-age\s*=\s*(\d+)/i);
+  const hstsEffective = Boolean(hstsMaxAge && Number(hstsMaxAge[1]) > 0);
+  // Browsers ignore HSTS received over HTTP, so evaluate effectiveness only
+  // on HTTPS responses. A present header with max-age=0 disables HSTS.
+  metrics['HSTS Present'] = isHttps ? hstsEffective : 'Not applicable (HTTP)';
+  if (isHttps && !hstsEffective) {
     issues.push({
       id: 'sec-hsts',
       category: 'security',
       severity: 'medium',
-      title: 'Missing Strict-Transport-Security (HSTS) Header',
-      description: 'The server does not mandate HTTPS connections via the HSTS response header.',
-      impact: 'Users making initial HTTP requests may be susceptible to SSL stripping attacks before any redirection occurs.',
-      remediation: 'Add `Strict-Transport-Security: max-age=31536000; includeSubDomains; preload` to your server response headers.',
+      title: hsts ? 'Ineffective Strict-Transport-Security (HSTS) Header' : 'Missing Strict-Transport-Security (HSTS) Header',
+      description: hsts
+        ? 'The HSTS header is present but does not contain a positive max-age directive, so browsers may not retain an HTTPS-only policy.'
+        : 'No Strict-Transport-Security header was observed on this HTTPS response.',
+      impact: 'Without an effective HSTS policy, browsers may be less protected against downgrade attempts after an initial HTTP visit.',
+      evidence: hsts || 'Header missing from response headers.',
+      remediation: 'After confirming HTTPS is supported across the intended host scope, configure a positive max-age value and carefully consider includeSubDomains or preload.',
     });
-  } else {
+  } else if (isHttps) {
     issues.push({
       id: 'sec-hsts-pass',
       category: 'security',
       severity: 'passed',
-      title: 'HSTS Header Configured',
-      description: 'Strict-Transport-Security is present, enforcing browser HTTPS communication.',
+      title: 'HSTS Header Has a Positive max-age',
+      description: 'The HTTPS response includes a Strict-Transport-Security header with a positive max-age. Scope and preload readiness were not fully evaluated.',
       evidence: hsts,
-      remediation: 'Verify includeSubDomains and preload parameters.',
+      remediation: 'Review host/subdomain scope and preload requirements separately.',
     });
   }
 
   // Check 4: X-Frame-Options
   const xfo = headers['x-frame-options'];
+  const validXfo = Boolean(xfo && /^(DENY|SAMEORIGIN)$/i.test(xfo.trim()));
+  const frameAncestorsDirective = csp?.split(';').map((part) => part.trim())
+    .find((part) => /^frame-ancestors(?:\s|$)/i.test(part));
+  const frameAncestorsSources = frameAncestorsDirective?.replace(/^frame-ancestors\s*/i, '').trim() || '';
+  const restrictiveFrameAncestors = frameAncestorsSources.length > 0
+    && !frameAncestorsSources.split(/\s+/).includes('*');
+  // A present CSP frame-ancestors directive takes precedence over X-Frame-Options
+  // in modern browsers, so a wildcard/empty directive must not be masked by XFO.
+  const hasFrameProtection = frameAncestorsDirective
+    ? restrictiveFrameAncestors
+    : validXfo;
   metrics['X-Frame-Options'] = xfo || 'Not set';
-  if (!xfo && (!csp || !csp.includes('frame-ancestors'))) {
+  if (!hasFrameProtection) {
     issues.push({
       id: 'sec-xfo',
       category: 'security',
       severity: 'medium',
       title: 'Clickjacking Protection Missing (X-Frame-Options)',
-      description: 'Neither X-Frame-Options nor CSP frame-ancestors is configured to prevent embedding in iframes.',
-      impact: 'Allows malicious third-party websites to frame this page and execute clickjacking attacks.',
-      remediation: "Set `X-Frame-Options: SAMEORIGIN` or `DENY`, or specify `frame-ancestors 'self'` in CSP.",
+      description: 'No valid X-Frame-Options value (DENY or SAMEORIGIN) or non-empty CSP frame-ancestors directive was observed.',
+      impact: 'If the page is frameable and sensitive interactions are present, embedding may enable clickjacking. This header check does not demonstrate an exploitable clickjacking flow.',
+      remediation: "Set X-Frame-Options to SAMEORIGIN or DENY, or specify a suitable frame-ancestors directive in CSP.",
+      evidence: xfo || 'No valid frame protection header observed.',
     });
   } else {
     issues.push({
       id: 'sec-xfo-pass',
       category: 'security',
       severity: 'passed',
-      title: 'Clickjacking Defense Enforced',
-      description: 'The page is protected against unauthorized iframe embedding.',
-      evidence: xfo || 'Protected via CSP frame-ancestors',
-      remediation: 'Keep frame restrictions updated for all embedded routes.',
+      title: 'Valid Frame Embedding Restriction Detected',
+      description: 'A supported X-Frame-Options value or non-empty CSP frame-ancestors directive was observed.',
+      evidence: validXfo ? xfo : 'Protected via CSP frame-ancestors',
+      remediation: 'Verify that frame restrictions match the intended embedding policy.',
     });
   }
 
   // Check 5: X-Content-Type-Options
   const xcto = headers['x-content-type-options'];
   metrics['X-Content-Type-Options'] = xcto || 'Not set';
-  if (!xcto || !xcto.toLowerCase().includes('nosniff')) {
+  if (!xcto || xcto.trim().toLowerCase() !== 'nosniff') {
     issues.push({
       id: 'sec-xcto',
       category: 'security',
@@ -193,10 +212,10 @@ export function runUrlDeterministicAudit(input: UrlAuditInput): {
     issues.push({
       id: 'seo-title-missing',
       category: 'seo',
-      severity: 'critical',
+      severity: 'medium',
       title: 'Missing <title> Element',
-      description: 'The HTML document does not contain a <title> tag in the <head>.',
-      impact: 'Critical search indexing penalty; search engines cannot determine page subject and browser tabs show URL.',
+      description: 'No title element was found in the fetched HTML response. Browser-rendered or other-route content was not inspected.',
+      impact: 'Browsers and search engines may have less descriptive information for this page; this observation does not establish a specific ranking penalty.',
       remediation: 'Add a descriptive <title> tag between 30 and 60 characters inside <head>.',
     });
   } else if (title.length < 20) {
@@ -206,7 +225,7 @@ export function runUrlDeterministicAudit(input: UrlAuditInput): {
       severity: 'medium',
       title: 'Page Title is Sub-optimally Short',
       description: `Current title is only ${title.length} characters long: "${title}".`,
-      impact: 'Fails to capitalize on search keyword density and search result real estate.',
+      impact: 'A short title may omit useful page or brand context; length alone does not determine title quality.',
       remediation: 'Expand the title to 30–60 characters to include primary brand and page intent keywords.',
       evidence: title,
     });
@@ -217,7 +236,7 @@ export function runUrlDeterministicAudit(input: UrlAuditInput): {
       severity: 'low',
       title: 'Page Title May Be Truncated in SERPs',
       description: `Current title is ${title.length} characters long and exceeds standard 60-character search snippets.`,
-      impact: 'Search engines will truncate the title with an ellipsis (...), hiding key terms.',
+      impact: 'Long titles may be truncated or rewritten in some search results; this is not guaranteed for every query or search engine.',
       remediation: 'Condense title to under 60 characters.',
       evidence: title,
     });
@@ -226,8 +245,8 @@ export function runUrlDeterministicAudit(input: UrlAuditInput): {
       id: 'seo-title-pass',
       category: 'seo',
       severity: 'passed',
-      title: 'Optimal Title Length and Presence',
-      description: `Title is well-formed (${title.length} characters).`,
+      title: 'Page Title Present and Within Configured Length Range',
+      description: 'A title element is present and contains ' + title.length + ' characters; this check does not assess relevance, uniqueness, or search-engine display.',
       evidence: title,
       remediation: 'Maintain keyword relevance and unique titles across different routes.',
     });
@@ -241,11 +260,11 @@ export function runUrlDeterministicAudit(input: UrlAuditInput): {
     issues.push({
       id: 'seo-desc-missing',
       category: 'seo',
-      severity: 'high',
+      severity: 'medium',
       title: 'Missing Meta Description',
-      description: 'The page lacks a <meta name="description"> tag.',
-      impact: 'Search engines will auto-generate snippets from random body text, decreasing organic click-through rates (CTR).',
-      remediation: 'Add a compelling meta description tag of 120–160 characters summarizing the page value proposition.',
+      description: 'No meta description was found in the fetched HTML response.',
+      impact: 'Search engines may generate their own snippets; a missing description does not by itself prove a ranking or click-through penalty.',
+      remediation: 'Consider adding a concise, page-specific description that accurately summarizes the content. Search engines may still choose a different snippet.',
     });
   } else if (metaDesc.length < 50 || metaDesc.length > 165) {
     issues.push({
@@ -253,8 +272,8 @@ export function runUrlDeterministicAudit(input: UrlAuditInput): {
       category: 'seo',
       severity: 'low',
       title: `Meta Description Length Sub-optimal (${metaDesc.length} chars)`,
-      description: 'Meta descriptions perform best when kept between 70 and 160 characters.',
-      remediation: 'Tune description length to 120–155 characters for optimal snippet presentation.',
+      description: 'This heuristic flags descriptions outside the configured 50–165 character range. Search engines do not guarantee a fixed display length.',
+      remediation: 'Review whether the description is concise and useful for the page; treat character counts as a guideline, not a ranking rule.',
       evidence: metaDesc,
     });
   } else {
@@ -262,8 +281,8 @@ export function runUrlDeterministicAudit(input: UrlAuditInput): {
       id: 'seo-desc-pass',
       category: 'seo',
       severity: 'passed',
-      title: 'Meta Description Tag Optimized',
-      description: `Meta description is present with ideal length (${metaDesc.length} chars).`,
+      title: 'Meta Description Present and Within Configured Length Range',
+      description: 'A meta description is present and contains ' + metaDesc.length + ' characters; this check does not assess its accuracy, uniqueness, or likely search performance.',
       evidence: metaDesc,
       remediation: 'Ensure unique descriptions per page.',
     });
@@ -279,7 +298,7 @@ export function runUrlDeterministicAudit(input: UrlAuditInput): {
       severity: 'medium',
       title: 'Missing Rel Canonical Link',
       description: 'No canonical URL tag (<link rel="canonical">) was detected.',
-      impact: 'Duplicate URL parameters (tracking tags, query strings, protocol variations) can dilute search ranking signals.',
+      impact: 'If multiple URLs serve substantially similar content, a canonical declaration can help communicate the preferred URL. This check did not establish that duplicate URLs exist.',
       remediation: 'Add `<link rel="canonical" href="https://example.com/page" />` inside the `<head>`.',
     });
   } else {
@@ -288,7 +307,7 @@ export function runUrlDeterministicAudit(input: UrlAuditInput): {
       category: 'seo',
       severity: 'passed',
       title: 'Canonical Link Declared',
-      description: 'Search engines are given an explicit preferred URL for indexation.',
+      description: 'A canonical href was observed; Auditor did not verify URL reachability, same-host suitability, or consistency with other pages.',
       evidence: canonical,
       remediation: 'Verify canonical URL matches primary canonical host.',
     });
@@ -305,7 +324,7 @@ export function runUrlDeterministicAudit(input: UrlAuditInput): {
       severity: 'medium',
       title: 'Incomplete Social Media OpenGraph Tags',
       description: `Missing essential social cards (${!ogTitle ? 'og:title ' : ''}${!ogImage ? 'og:image' : ''}).`,
-      impact: 'Links shared on LinkedIn, Twitter, Slack, and Facebook will display plain text or broken card previews.',
+      impact: 'Some sharing platforms may show incomplete or less predictable previews when these tags are absent; actual preview rendering was not tested.',
       remediation: 'Add `og:title`, `og:description`, `og:image`, and `og:url` tags to optimize social sharing CTR.',
     });
   } else {
@@ -313,8 +332,8 @@ export function runUrlDeterministicAudit(input: UrlAuditInput): {
       id: 'seo-og-pass',
       category: 'seo',
       severity: 'passed',
-      title: 'OpenGraph Social Card Meta Ready',
-      description: 'og:title and og:image are properly declared.',
+      title: 'OpenGraph Title and Image Tags Declared',
+      description: 'og:title and og:image tags are present. Their URLs, image accessibility, and actual platform preview rendering were not validated.',
       evidence: `og:title="${ogTitle}"`,
       remediation: 'Test social card preview rendering.',
     });
@@ -326,19 +345,19 @@ export function runUrlDeterministicAudit(input: UrlAuditInput): {
     issues.push({
       id: 'seo-viewport',
       category: 'seo',
-      severity: 'critical',
+      severity: 'medium',
       title: 'Missing Viewport Meta Tag',
-      description: 'The page does not declare a mobile viewport tag.',
-      impact: 'Mobile browsers will render the desktop version in 980px zoom mode, failing mobile-friendliness audits.',
-      remediation: 'Add `<meta name="viewport" content="width=device-width, initial-scale=1.0">`.',
+      description: 'No viewport meta tag was found in the fetched HTML response.',
+      impact: 'The absence may affect mobile layout behavior, but browser rendering was not tested in this audit.',
+      remediation: 'Add a viewport declaration appropriate for the page, commonly <meta name="viewport" content="width=device-width, initial-scale=1">.',
     });
   } else {
     issues.push({
       id: 'seo-viewport-pass',
       category: 'seo',
       severity: 'passed',
-      title: 'Responsive Mobile Viewport Declared',
-      description: 'Viewport tag is present and configured.',
+      title: 'Viewport Meta Tag Present',
+      description: 'A viewport meta tag was observed. This check does not validate its settings or confirm responsive rendering.',
       evidence: viewport,
       remediation: 'Avoid user-scalable=no to preserve accessibility zoom capabilities.',
     });
@@ -435,8 +454,8 @@ export function runUrlDeterministicAudit(input: UrlAuditInput): {
       id: 'a11y-h1-pass',
       category: 'accessibility',
       severity: 'passed',
-      title: 'Proper Single <h1> Document Structure',
-      description: 'The page has a clear single <h1> element.',
+      title: 'Single H1 Element Detected',
+      description: 'Exactly one h1 element was found in the fetched HTML; heading hierarchy and visual presentation were not evaluated.',
       evidence: $('h1').first().text().trim().substring(0, 60),
       remediation: 'Maintain logical progression (H1 -> H2 -> H3).',
     });
@@ -540,17 +559,17 @@ export function runCodeDeterministicAudit(input: CodeAuditInput): {
   metrics['Filename'] = input.filename;
 
   // Rule 1: Hardcoded AWS Credentials
-  const awsRegex = /(?:AKIA|ASIA)[0-9A-Z]{16}/g;
+  const awsRegex = /(?:AKIA|ASIA)[0-9A-Z]{16}/;
   lines.forEach((line, idx) => {
     if (awsRegex.test(line)) {
       issues.push({
         id: `code-aws-key-${idx + 1}`,
         category: 'security',
-        severity: 'critical',
-        title: 'Hardcoded AWS Access Key Detected',
-        description: `Potential hardcoded AWS Access Key ID found on line ${idx + 1}.`,
-        impact: 'Exposed cloud credentials allow attackers to take over cloud infrastructure, exfiltrate data, or incur massive compute costs.',
-        remediation: 'Immediately rotate this key in AWS IAM and store secrets in environment variables (e.g. AWS_ACCESS_KEY_ID) or secret managers (AWS Secrets Manager, Vault).',
+        severity: 'high',
+        title: 'Potential Hardcoded AWS Access Key ID',
+        description: `An AWS key-shaped identifier was found on line ${idx + 1}. Static pattern matching cannot determine whether it is a real credential, active, or a placeholder.`, 
+        impact: 'If this is a valid or previously exposed credential, it may enable unauthorized access to AWS resources. Validity and permissions were not checked.',
+        remediation: 'Verify whether the value is a real credential. If valid or exposed, revoke or rotate it and review cloud access logs; store replacement credentials in a secret manager.',
         lineNumber: idx + 1,
         evidence: line.trim(),
         codeSnippet: {
@@ -570,11 +589,11 @@ export function runCodeDeterministicAudit(input: CodeAuditInput): {
       issues.push({
         id: `code-hardcoded-secret-${idx + 1}`,
         category: 'security',
-        severity: 'critical',
-        title: 'Hardcoded API Key or Secret Credential',
-        description: `Hardcoded secret string detected on line ${idx + 1}.`,
-        impact: 'Committing secrets into source control makes them permanently discoverable in git history by malicious actors.',
-        remediation: 'Extract credentials into `.env` files or system environment variables and add secret files to `.gitignore`.',
+        severity: 'high',
+        title: 'Potential Hardcoded Credential-Like Value',
+        description: `A string matching a credential-like assignment pattern was found on line ${idx + 1}. It may be a real secret, test value, or placeholder; validity was not checked.`, 
+        impact: 'If the value is a live credential and is committed to source control, it may be exposed through repository access or history.',
+        remediation: 'Verify whether the value is a real secret. If it is live or exposed, revoke or rotate it and remove it from active code; remember that deleting a line does not erase Git history.',
         lineNumber: idx + 1,
         evidence: line.trim(),
         codeSnippet: {
@@ -592,11 +611,11 @@ export function runCodeDeterministicAudit(input: CodeAuditInput): {
       issues.push({
         id: `code-sqli-${idx + 1}`,
         category: 'security',
-        severity: 'critical',
-        title: 'SQL Injection Vulnerability (Concatenated Query)',
-        description: `Unsanitized user inputs are interpolated or concatenated directly into a SQL statement on line ${idx + 1}.`,
-        impact: 'Enables attackers to bypass authentication, dump database records, or corrupt tables via malicious SQL syntax injection.',
-        remediation: 'Use parameterized / prepared statements or an ORM with automatic query parameter escaping (e.g. `db.query("SELECT * FROM users WHERE id = $1", [userId])`).',
+        severity: 'medium',
+        title: 'Potential SQL Injection Risk from Query Construction',
+        description: `SQL-like query string concatenation or interpolation was detected on line ${idx + 1}. This pattern alone does not prove that attacker-controlled input reaches the query.`, 
+        impact: 'If untrusted input reaches the constructed query without safe parameterization, an attacker may alter the intended SQL operation.',
+        remediation: 'Trace the values used to build the query and use parameterized/prepared statements for untrusted values. Confirm the actual query API and data flow before classifying this as a confirmed vulnerability.',
         lineNumber: idx + 1,
         evidence: line.trim(),
         codeSnippet: {
@@ -615,11 +634,11 @@ export function runCodeDeterministicAudit(input: CodeAuditInput): {
       issues.push({
         id: `code-eval-${idx + 1}`,
         category: 'security',
-        severity: 'high',
-        title: 'Dangerous Dynamic Code Execution (`eval`)',
-        description: `Direct use of \`eval()\` or dynamic \`Function()\` constructor found on line ${idx + 1}.`,
-        impact: 'If any portion of the evaluated string contains untrusted user input, it allows arbitrary Remote Code Execution (RCE).',
-        remediation: 'Refactor the logic to use typed functions, JSON.parse() for structured data, or safe lookup tables instead of dynamic evaluation.',
+        severity: 'medium',
+        title: 'Dynamic Code Execution Requires Context Review',
+        description: `Use of \`eval()\` or the dynamic \`Function()\` constructor was detected on line ${idx + 1}. Its presence alone does not establish that untrusted input is evaluated.`, 
+        impact: 'If attacker-controlled content reaches dynamic evaluation, it may enable code execution in the current execution context.',
+        remediation: 'Trace the evaluated value to its source. Avoid dynamic evaluation where possible; if required, ensure untrusted input cannot reach it.',
         lineNumber: idx + 1,
         evidence: line.trim(),
       });
@@ -633,11 +652,11 @@ export function runCodeDeterministicAudit(input: CodeAuditInput): {
       issues.push({
         id: `code-xss-${idx + 1}`,
         category: 'security',
-        severity: 'high',
-        title: 'Potential Cross-Site Scripting (DOM Injection)',
-        description: `Unescaped HTML injection via \`dangerouslySetInnerHTML\` or \`innerHTML\` on line ${idx + 1}.`,
-        impact: 'Allows malicious actors to inject client-side JavaScript, steal cookies, or hijack sessions if user input is rendered without sanitization.',
-        remediation: 'Sanitize HTML inputs using libraries like DOMPurify or render pure text nodes via standard React children.',
+        severity: 'medium',
+        title: 'Potential HTML Injection Sink Requires Context Review',
+        description: `An HTML injection sink (\`dangerouslySetInnerHTML\` or \`innerHTML\`) was detected on line ${idx + 1}. This does not prove that untrusted input reaches the sink or that sanitization is absent.`, 
+        impact: 'If attacker-controlled HTML reaches the sink without effective sanitization, it may enable cross-site scripting or other DOM injection.',
+        remediation: 'Trace the value supplied to the sink. Prefer rendering text; when HTML is required, use a suitable sanitizer and verify that sanitization cannot be bypassed.',
         lineNumber: idx + 1,
         evidence: line.trim(),
         codeSnippet: {
@@ -655,11 +674,11 @@ export function runCodeDeterministicAudit(input: CodeAuditInput): {
       issues.push({
         id: `code-cmd-inj-${idx + 1}`,
         category: 'security',
-        severity: 'critical',
-        title: 'Command Injection Risk in System Execution',
-        description: `Unsanitized parameters concatenated into child_process \`exec()\` on line ${idx + 1}.`,
-        impact: 'Attackers can append shell metacharacters (e.g. `; rm -rf /`, `| cat /etc/passwd`) to execute arbitrary operating system commands.',
-        remediation: 'Use `execFile` or `spawn` with an array of arguments instead of spawning a shell with interpolated command strings.',
+        severity: 'medium',
+        title: 'Potential Command Injection Risk',
+        description: `Shell command construction with concatenation or interpolation was detected on line ${idx + 1}. The pattern alone does not establish that attacker-controlled input reaches the command.`, 
+        impact: 'If untrusted input is interpolated into a shell command, an attacker may execute unintended operating-system commands.',
+        remediation: 'Trace command arguments to their sources. Prefer `execFile` or `spawn` with argument arrays and avoid invoking a shell with untrusted interpolated values.',
         lineNumber: idx + 1,
         evidence: line.trim(),
       });
@@ -674,9 +693,9 @@ export function runCodeDeterministicAudit(input: CodeAuditInput): {
         id: `code-weak-crypto-${idx + 1}`,
         category: 'quality',
         severity: 'medium',
-        title: 'Use of Deprecated/Weak Hashing Algorithm (MD5/SHA1)',
-        description: `MD5 or SHA1 hash detected on line ${idx + 1}.`,
-        impact: 'These algorithms suffer from known collision vulnerabilities and must never be used for password hashing, digital signatures, or security tokens.',
+        title: 'MD5/SHA-1 Use Requires Context Review',
+        description: `MD5 or SHA-1 usage was detected on line ${idx + 1}. Suitability depends on the purpose; collision resistance is inadequate for security-sensitive uses.`, 
+        impact: 'Do not use MD5 or SHA-1 for password storage, digital signatures, or security tokens. Some non-security legacy checksum uses have different requirements.',
         remediation: 'Use SHA-256 / SHA-3 for checksums or bcrypt / Argon2 / PBKDF2 for password storage.',
         lineNumber: idx + 1,
         evidence: line.trim(),
@@ -707,8 +726,8 @@ export function runCodeDeterministicAudit(input: CodeAuditInput): {
       id: 'code-clean-pass',
       category: 'security',
       severity: 'passed',
-      title: 'No Common Vulnerability Signatures Found',
-      description: 'Static pattern scanning did not detect obvious credentials, SQL concatenation, or dynamic evaluation.',
+      title: 'No Selected Deterministic Pattern Matches',
+      description: 'The selected deterministic pattern checks did not match this supplied snippet. This does not establish that the code is free of vulnerabilities or that untested code paths are safe.',
       remediation: 'Continue adhering to static typing, safe parameter binding, and continuous dependency auditing.',
     });
   }
