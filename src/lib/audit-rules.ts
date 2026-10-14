@@ -542,17 +542,17 @@ export function runCodeDeterministicAudit(input: CodeAuditInput): {
   metrics['Filename'] = input.filename;
 
   // Rule 1: Hardcoded AWS Credentials
-  const awsRegex = /(?:AKIA|ASIA)[0-9A-Z]{16}/g;
+  const awsRegex = /(?:AKIA|ASIA)[0-9A-Z]{16}/;
   lines.forEach((line, idx) => {
     if (awsRegex.test(line)) {
       issues.push({
         id: `code-aws-key-${idx + 1}`,
         category: 'security',
-        severity: 'critical',
-        title: 'Hardcoded AWS Access Key Detected',
-        description: `Potential hardcoded AWS Access Key ID found on line ${idx + 1}.`,
-        impact: 'Exposed cloud credentials allow attackers to take over cloud infrastructure, exfiltrate data, or incur massive compute costs.',
-        remediation: 'Immediately rotate this key in AWS IAM and store secrets in environment variables (e.g. AWS_ACCESS_KEY_ID) or secret managers (AWS Secrets Manager, Vault).',
+        severity: 'high',
+        title: 'Potential Hardcoded AWS Access Key ID',
+        description: `An AWS key-shaped identifier was found on line ${idx + 1}. Static pattern matching cannot determine whether it is a real credential, active, or a placeholder.`, 
+        impact: 'If this is a valid or previously exposed credential, it may enable unauthorized access to AWS resources. Validity and permissions were not checked.',
+        remediation: 'Verify whether the value is a real credential. If valid or exposed, revoke or rotate it and review cloud access logs; store replacement credentials in a secret manager.',
         lineNumber: idx + 1,
         evidence: line.trim(),
         codeSnippet: {
@@ -572,11 +572,11 @@ export function runCodeDeterministicAudit(input: CodeAuditInput): {
       issues.push({
         id: `code-hardcoded-secret-${idx + 1}`,
         category: 'security',
-        severity: 'critical',
-        title: 'Hardcoded API Key or Secret Credential',
-        description: `Hardcoded secret string detected on line ${idx + 1}.`,
-        impact: 'Committing secrets into source control makes them permanently discoverable in git history by malicious actors.',
-        remediation: 'Extract credentials into `.env` files or system environment variables and add secret files to `.gitignore`.',
+        severity: 'high',
+        title: 'Potential Hardcoded Credential-Like Value',
+        description: `A string matching a credential-like assignment pattern was found on line ${idx + 1}. It may be a real secret, test value, or placeholder; validity was not checked.`, 
+        impact: 'If the value is a live credential and is committed to source control, it may be exposed through repository access or history.',
+        remediation: 'Verify whether the value is a real secret. If it is live or exposed, revoke or rotate it and remove it from active code; remember that deleting a line does not erase Git history.',
         lineNumber: idx + 1,
         evidence: line.trim(),
         codeSnippet: {
@@ -594,11 +594,11 @@ export function runCodeDeterministicAudit(input: CodeAuditInput): {
       issues.push({
         id: `code-sqli-${idx + 1}`,
         category: 'security',
-        severity: 'critical',
-        title: 'SQL Injection Vulnerability (Concatenated Query)',
-        description: `Unsanitized user inputs are interpolated or concatenated directly into a SQL statement on line ${idx + 1}.`,
-        impact: 'Enables attackers to bypass authentication, dump database records, or corrupt tables via malicious SQL syntax injection.',
-        remediation: 'Use parameterized / prepared statements or an ORM with automatic query parameter escaping (e.g. `db.query("SELECT * FROM users WHERE id = $1", [userId])`).',
+        severity: 'medium',
+        title: 'Potential SQL Injection Risk from Query Construction',
+        description: `SQL-like query string concatenation or interpolation was detected on line ${idx + 1}. This pattern alone does not prove that attacker-controlled input reaches the query.`, 
+        impact: 'If untrusted input reaches the constructed query without safe parameterization, an attacker may alter the intended SQL operation.',
+        remediation: 'Trace the values used to build the query and use parameterized/prepared statements for untrusted values. Confirm the actual query API and data flow before classifying this as a confirmed vulnerability.',
         lineNumber: idx + 1,
         evidence: line.trim(),
         codeSnippet: {
@@ -617,11 +617,11 @@ export function runCodeDeterministicAudit(input: CodeAuditInput): {
       issues.push({
         id: `code-eval-${idx + 1}`,
         category: 'security',
-        severity: 'high',
-        title: 'Dangerous Dynamic Code Execution (`eval`)',
-        description: `Direct use of \`eval()\` or dynamic \`Function()\` constructor found on line ${idx + 1}.`,
-        impact: 'If any portion of the evaluated string contains untrusted user input, it allows arbitrary Remote Code Execution (RCE).',
-        remediation: 'Refactor the logic to use typed functions, JSON.parse() for structured data, or safe lookup tables instead of dynamic evaluation.',
+        severity: 'medium',
+        title: 'Dynamic Code Execution Requires Context Review',
+        description: `Use of \`eval()\` or the dynamic \`Function()\` constructor was detected on line ${idx + 1}. Its presence alone does not establish that untrusted input is evaluated.`, 
+        impact: 'If attacker-controlled content reaches dynamic evaluation, it may enable code execution in the current execution context.',
+        remediation: 'Trace the evaluated value to its source. Avoid dynamic evaluation where possible; if required, ensure untrusted input cannot reach it.',
         lineNumber: idx + 1,
         evidence: line.trim(),
       });
@@ -635,11 +635,11 @@ export function runCodeDeterministicAudit(input: CodeAuditInput): {
       issues.push({
         id: `code-xss-${idx + 1}`,
         category: 'security',
-        severity: 'high',
-        title: 'Potential Cross-Site Scripting (DOM Injection)',
-        description: `Unescaped HTML injection via \`dangerouslySetInnerHTML\` or \`innerHTML\` on line ${idx + 1}.`,
-        impact: 'Allows malicious actors to inject client-side JavaScript, steal cookies, or hijack sessions if user input is rendered without sanitization.',
-        remediation: 'Sanitize HTML inputs using libraries like DOMPurify or render pure text nodes via standard React children.',
+        severity: 'medium',
+        title: 'Potential HTML Injection Sink Requires Context Review',
+        description: `An HTML injection sink (\`dangerouslySetInnerHTML\` or \`innerHTML\`) was detected on line ${idx + 1}. This does not prove that untrusted input reaches the sink or that sanitization is absent.`, 
+        impact: 'If attacker-controlled HTML reaches the sink without effective sanitization, it may enable cross-site scripting or other DOM injection.',
+        remediation: 'Trace the value supplied to the sink. Prefer rendering text; when HTML is required, use a suitable sanitizer and verify that sanitization cannot be bypassed.',
         lineNumber: idx + 1,
         evidence: line.trim(),
         codeSnippet: {
@@ -657,11 +657,11 @@ export function runCodeDeterministicAudit(input: CodeAuditInput): {
       issues.push({
         id: `code-cmd-inj-${idx + 1}`,
         category: 'security',
-        severity: 'critical',
-        title: 'Command Injection Risk in System Execution',
-        description: `Unsanitized parameters concatenated into child_process \`exec()\` on line ${idx + 1}.`,
-        impact: 'Attackers can append shell metacharacters (e.g. `; rm -rf /`, `| cat /etc/passwd`) to execute arbitrary operating system commands.',
-        remediation: 'Use `execFile` or `spawn` with an array of arguments instead of spawning a shell with interpolated command strings.',
+        severity: 'medium',
+        title: 'Potential Command Injection Risk',
+        description: `Shell command construction with concatenation or interpolation was detected on line ${idx + 1}. The pattern alone does not establish that attacker-controlled input reaches the command.`, 
+        impact: 'If untrusted input is interpolated into a shell command, an attacker may execute unintended operating-system commands.',
+        remediation: 'Trace command arguments to their sources. Prefer `execFile` or `spawn` with argument arrays and avoid invoking a shell with untrusted interpolated values.',
         lineNumber: idx + 1,
         evidence: line.trim(),
       });
@@ -676,9 +676,9 @@ export function runCodeDeterministicAudit(input: CodeAuditInput): {
         id: `code-weak-crypto-${idx + 1}`,
         category: 'quality',
         severity: 'medium',
-        title: 'Use of Deprecated/Weak Hashing Algorithm (MD5/SHA1)',
-        description: `MD5 or SHA1 hash detected on line ${idx + 1}.`,
-        impact: 'These algorithms suffer from known collision vulnerabilities and must never be used for password hashing, digital signatures, or security tokens.',
+        title: 'MD5/SHA-1 Use Requires Context Review',
+        description: `MD5 or SHA-1 usage was detected on line ${idx + 1}. Suitability depends on the purpose; collision resistance is inadequate for security-sensitive uses.`, 
+        impact: 'Do not use MD5 or SHA-1 for password storage, digital signatures, or security tokens. Some non-security legacy checksum uses have different requirements.',
         remediation: 'Use SHA-256 / SHA-3 for checksums or bcrypt / Argon2 / PBKDF2 for password storage.',
         lineNumber: idx + 1,
         evidence: line.trim(),
