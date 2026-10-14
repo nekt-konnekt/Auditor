@@ -18,6 +18,14 @@ test('AI findings without evidence from the supplied snapshot are discarded', ()
   assert.equal(result.length, 0);
 });
 
+
+test('AI findings supported only by a short generic token are discarded', () => {
+  const result = filterEvidenceBackedIssues([
+    { ...candidate, evidence: 'const' },
+  ], 'code', 'const token = value;', {});
+  assert.equal(result.length, 0);
+});
+
 test('AI findings with exact observed evidence are retained with evidence attached', () => {
   const result = filterEvidenceBackedIssues([
     candidate,
