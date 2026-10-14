@@ -46,3 +46,23 @@ test('Markdown scorecard does not present issue-record counts as checks passed',
   assert.doesNotMatch(markdown, /Passed Checks/);
   assert.doesNotMatch(markdown, /1 \/ 2/);
 });
+
+
+test('Markdown report identifies repository target instead of calling it a code snippet', () => {
+  const report: AuditReport = {
+    id: 'repository-target-regression',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    target: { type: 'repository', target: 'https://github.com/acme/widget' },
+    overallScore: 80,
+    summary: 'A repository hygiene review.',
+    issues: [],
+    categories: Object.fromEntries(categories.map((category) => [
+      category,
+      { category, score: 100, passedCount: 0, totalChecks: 0 },
+    ])) as AuditReport['categories'],
+  };
+
+  const markdown = generateAuditMarkdown(report);
+  assert.match(markdown, /^# Audit Report: https:\/\/github\.com\/acme\/widget$/m);
+  assert.doesNotMatch(markdown, /# Audit Report: Code Snippet/);
+});
