@@ -60,9 +60,11 @@ ${coverageNote}
 
   Object.entries(report.categories).forEach(([catKey, catScore]) => {
     const name = CATEGORY_NAMES[catKey as Category] || catKey;
-    const scoreVal = `${catScore.score} / 100`;
-    const checksVal = `${catScore.passedCount} / ${catScore.totalChecks}`;
-    const status = catScore.score >= 85 ? 'Fewer weighted findings' : catScore.score >= 60 ? 'Review findings' : 'Many weighted findings';
+    const scoreVal = catScore.totalChecks > 0 ? `${catScore.score} / 100` : 'Not assessed';
+    const checksVal = catScore.totalChecks > 0 ? `${catScore.passedCount} / ${catScore.totalChecks}` : '—';
+    const status = catScore.totalChecks === 0
+      ? 'Not assessed'
+      : catScore.score >= 85 ? 'Fewer weighted findings' : catScore.score >= 60 ? 'Review findings' : 'Many weighted findings';
     md += `| ${name} | ${scoreVal} | ${checksVal} | ${status} |\n`;
   });
 
