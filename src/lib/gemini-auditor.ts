@@ -87,8 +87,8 @@ export async function analyzeWithGemini(
     return {
       summary:
         type === 'url'
-          ? `Audit conducted on ${target}. Analyzed live HTTP headers, SEO tags, markup accessibility, and response timing against modern web standards.`
-          : `Static source code audit performed for ${contextMeta.filename || 'input code'}. Scanned for common vulnerabilities, OWASP patterns, and insecure implementations.`,
+          ? `Auditor evaluated the submitted HTTP response against selected checks for transport/security headers, SEO metadata, selected HTML accessibility signals, and HTML fetch duration. Browser/runtime behavior and other routes were not tested.`
+          : `Selected deterministic pattern checks ran on the supplied snippet for credential-like values, query construction, dynamic execution, HTML injection sinks, weak hashing, and empty catch blocks. This is not a complete security review.`,
       additionalIssues: [],
     };
   }
@@ -204,8 +204,8 @@ For each supported finding, provide:
     return {
       summary:
         type === 'url'
-          ? `Automated diagnostic audit of ${target}. Evaluated security headers, mobile viewport, metadata indexing, and DOM accessibility.`
-          : `Static vulnerability audit for ${contextMeta.filename || 'code'}. Scanned for hardcoded credentials, SQL injection, and insecure execution patterns.`,
+          ? `Automated diagnostic checks evaluated selected security headers, mobile viewport metadata, SEO tags, and HTML accessibility signals for ${target}. Browser behavior and other routes were not tested.`
+          : `Selected static pattern checks ran on ${contextMeta.filename || 'the supplied snippet'} for credential-like values, SQL query construction, dynamic execution, and HTML injection sinks. Findings require context review; untested code and runtime behavior are outside this scan.`,
       additionalIssues: [],
     };
   }
