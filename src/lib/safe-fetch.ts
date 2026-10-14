@@ -136,7 +136,21 @@ export async function fetchPublicPage(input: string, timeoutMs = 12_000): Promis
       });
     } catch (error) {
       if (controller.signal.aborted) throw new Error('The target website timed out.');
-      throw new Error('The target website could not be reached.');
+      const causeCode = typeof error === 'object' && error !== null && 'cause' in error
+        ? (error as { cause?: { code?: string } }).cause?.code
+        : undefined;
+      if (causeCode === 'ENOTFOUND' || causeCode === 'EAI_AGAIN') {
+        throw new Error('The target hostname could not be resolved.');
+      }
+      if (causeCode === 'CERT_HAS_EXPIRED' || causeCode === 'DEPTH_ZERO_SELF_SIGNED_CERT'
+        || causeCode === 'ERR_TLS_CERT_ALTNAME_INVALID' || causeCode === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE') {
+        throw new Error('The target TLS certificate could not be validated.');
+      }
+      if (causeCode === 'ECONNREFUSED' || causeCode === 'ECONNRESET'
+        || causeCode === 'EHOSTUNREACH' || causeCode === 'ENETUNREACH') {
+        throw new Error('The target server refused or reset the connection, or the network route is unavailable.');
+      }
+      throw new Error('The target website could not be reached due to a network or TLS connection failure.');
     } finally {
       clearTimeout(timeout);
     }
