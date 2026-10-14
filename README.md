@@ -35,7 +35,7 @@ cp .env.example .env
 bun run dev
 ```
 
-Open the local URL printed by Vite. The development server exposes the API on port 3000.
+Open http://localhost:3000. The Express server mounts Vite in development and exposes the API on the same port.
 
 ## Environment
 
