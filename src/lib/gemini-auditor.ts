@@ -26,6 +26,54 @@ export interface GeminiAuditAnalysis {
 }
 
 /**
+ * Validate AI-generated findings against the exact material supplied to the model.
+ * This is a provenance check, not proof that the model's interpretation is correct.
+ */
+export function filterEvidenceBackedIssues(
+  candidateIssues: unknown,
+  type: 'url' | 'code',
+  contentSnippet: string,
+  contextMeta: Record<string, any>,
+): AuditIssue[] {
+  if (!Array.isArray(candidateIssues)) return [];
+  const validCategories = ['security', 'seo', 'accessibility', 'performance', 'quality'];
+  const validSeverities = ['critical', 'high', 'medium', 'low'];
+  const observableText = contentSnippet.substring(0, type === 'url' ? 3000 : 4000);
+  const observedHeaders = type === 'url' ? JSON.stringify(contextMeta.headers || {}) : '';
+
+  return candidateIssues.flatMap((item: any, idx: number) => {
+    if (!item || typeof item !== 'object') return [];
+    const evidence = typeof item.evidence === 'string' ? item.evidence.trim() : '';
+    const evidenceIsObserved = evidence.length > 0
+      && (observableText.includes(evidence) || observedHeaders.includes(evidence));
+    if (!evidenceIsObserved || item.severity === 'passed') return [];
+    if (
+      typeof item.title !== 'string' || !item.title.trim()
+      || typeof item.description !== 'string' || !item.description.trim()
+      || typeof item.remediation !== 'string' || !item.remediation.trim()
+    ) return [];
+
+    const cat = validCategories.includes(item.category) ? item.category : (type === 'url' ? 'seo' : 'security');
+    const sev = validSeverities.includes(item.severity) ? item.severity : 'medium';
+
+    return [{
+      id: `ai-finding-${idx + 1}-${Date.now().toString(36)}`,
+      category: cat,
+      severity: sev,
+      title: item.title,
+      description: item.description,
+      impact: typeof item.impact === 'string' ? item.impact : undefined,
+      remediation: item.remediation,
+      evidence,
+      codeSnippet: item.originalCode || item.proposedFix ? {
+        original: item.originalCode,
+        proposed: item.proposedFix,
+      } : undefined,
+    }];
+  });
+}
+
+/**
  * Perform deep contextual AI security and code quality analysis using Gemini 3.8 Flash
  */
 export async function analyzeWithGemini(
@@ -141,44 +189,7 @@ For each supported finding, provide:
     });
 
     const parsed = JSON.parse(response.text || '{}');
-    const candidateIssues = Array.isArray(parsed.issues) ? parsed.issues : [];
-    const validCategories = ['security', 'seo', 'accessibility', 'performance', 'quality'];
-    const validSeverities = ['critical', 'high', 'medium', 'low'];
-    const observableText = contentSnippet.substring(0, type === 'url' ? 3000 : 4000);
-    const observedHeaders = type === 'url' ? JSON.stringify(contextMeta.headers || {}) : '';
-
-    // Treat model output as untrusted. Only retain findings whose exact evidence
-    // appears in the supplied snapshot; discard unsupported and AI-generated pass claims.
-    const additionalIssues: AuditIssue[] = candidateIssues.flatMap((item: any, idx: number) => {
-      if (!item || typeof item !== 'object') return [];
-      const evidence = typeof item.evidence === 'string' ? item.evidence.trim() : '';
-      const evidenceIsObserved = evidence.length > 0
-        && (observableText.includes(evidence) || observedHeaders.includes(evidence));
-      if (!evidenceIsObserved || item.severity === 'passed') return [];
-      if (
-        typeof item.title !== 'string' || !item.title.trim()
-        || typeof item.description !== 'string' || !item.description.trim()
-        || typeof item.remediation !== 'string' || !item.remediation.trim()
-      ) return [];
-
-      const cat = validCategories.includes(item.category) ? item.category : (type === 'url' ? 'seo' : 'security');
-      const sev = validSeverities.includes(item.severity) ? item.severity : 'medium';
-
-      return [{
-        id: `ai-finding-${idx + 1}-${Date.now().toString(36)}`,
-        category: cat,
-        severity: sev,
-        title: item.title,
-        description: item.description,
-        impact: typeof item.impact === 'string' ? item.impact : undefined,
-        remediation: item.remediation,
-        evidence,
-        codeSnippet: item.originalCode || item.proposedFix ? {
-          original: item.originalCode,
-          proposed: item.proposedFix,
-        } : undefined,
-      }];
-    });
+    const additionalIssues = filterEvidenceBackedIssues(parsed.issues, type, contentSnippet, contextMeta);
 
     const summary = additionalIssues.length > 0
       ? `AI-assisted review returned ${additionalIssues.length} additional finding(s) whose cited evidence appears in the supplied snapshot. Validate the context and impact of each finding before treating it as confirmed.`
