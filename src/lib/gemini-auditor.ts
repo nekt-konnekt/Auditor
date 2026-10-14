@@ -180,8 +180,12 @@ For each supported finding, provide:
       }];
     });
 
+    const summary = additionalIssues.length > 0
+      ? `AI-assisted review returned ${additionalIssues.length} additional finding(s) whose cited evidence appears in the supplied snapshot. Validate the context and impact of each finding before treating it as confirmed.`
+      : 'AI-assisted review returned no additional findings that met the evidence requirement. This is not evidence that no other issues exist; review the deterministic findings and stated coverage limits.';
+
     return {
-      summary: parsed.summary || 'Audit completed successfully.',
+      summary,
       additionalIssues,
     };
   } catch (err) {
