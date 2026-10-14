@@ -183,7 +183,7 @@ export async function auditGitHubRepo(url: string): Promise<AuditReport> {
         title: 'Missing .env Exclusion in .gitignore',
         description: 'The inspected `.gitignore` does not appear to exclude `.env` files. This is a preventive-hardening gap; it does not establish that secrets are present in the repository or have been exposed.',
         impact: 'If environment files containing secrets are created and committed, credentials could be exposed. This check does not scan repository history or confirm that such files exist.',
-        remediation: 'Append `.env`, `.env.*`, and `.env.local` to `.gitignore`.',
+        remediation: 'Review the project-specific ignore rules and exclude local environment files such as `.env`, `.env.local`, and applicable variants. Also use secret scanning; `.gitignore` alone cannot remove secrets already committed.',
         codeSnippet: {
           original: '# Current .gitignore missing .env',
           proposed: '# Environment variables\n.env\n.env.*\n.env.local\n*.pem\n*.key',
