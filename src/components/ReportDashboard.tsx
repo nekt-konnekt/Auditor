@@ -98,6 +98,9 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
     report.target.type === 'url'
       ? report.target.target
       : report.target.filename || 'Source Code File';
+  const isHttpErrorResponse = report.target.type === 'url'
+    && typeof report.target.statusCode === 'number'
+    && report.target.statusCode >= 400;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
@@ -166,12 +169,19 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
         </div>
       </div>
 
+      {isHttpErrorResponse && (
+        <div role="alert" className="p-5 rounded-xl border border-rose-300 bg-rose-50 text-rose-950">
+          <p className="text-sm font-bold uppercase tracking-wide">HTTP {report.target.statusCode} — target returned an error</p>
+          <p className="mt-1 text-sm leading-relaxed">This scan inspected the error response, not necessarily the intended website page. The score below is diagnostic only and must not be read as an overall website-health score. SEO and accessibility findings may describe the error page.</p>
+        </div>
+      )}
+
       {/* KPI Scores Row */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         {/* Overall Score */}
         <div className="col-span-2 md:col-span-1 p-5 rounded-xl border border-slate-200 bg-white shadow-2xs">
           <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">
-            Overall Health
+            {isHttpErrorResponse ? 'Diagnostic Score · Error Response' : 'Overall Health'}
           </span>
           <div className="mt-2 flex items-baseline gap-1">
             <span className="text-4xl font-extrabold text-slate-900 font-mono tabular-nums">
@@ -179,6 +189,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
             </span>
             <span className="text-sm font-medium text-slate-400 font-mono">/100</span>
           </div>
+          <p className="mt-2 text-[11px] leading-relaxed text-slate-500">Severity-weighted score, not the percentage of checks passed.</p>
           <div className="mt-3">
             <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
               <div
@@ -273,6 +284,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
         <p className="text-sm text-slate-700 leading-relaxed">
           {report.summary}
         </p>
+        <p className="mt-3 text-xs leading-relaxed text-slate-500">Coverage note: this report evaluates the rules shown below against the fetched response. It does not execute browser-based tests, validate every route, or guarantee overall security, accessibility, or real-user performance.</p>
 
         {report.metrics && Object.keys(report.metrics).length > 0 && (
           <div className="mt-5 pt-4 border-t border-slate-100 flex flex-wrap gap-x-6 gap-y-2 text-xs text-slate-600 font-mono">
