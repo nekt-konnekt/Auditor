@@ -283,7 +283,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
         <p className="text-sm text-slate-700 leading-relaxed">
           {report.summary}
         </p>
-        <p className="mt-3 text-xs leading-relaxed text-slate-500">Coverage note: this report evaluates the rules shown below against the fetched response. It does not execute browser-based tests, validate every route, or guarantee overall security, accessibility, or real-user performance.</p>
+        <p className="mt-3 text-xs leading-relaxed text-slate-500">Not performed: browser rendering tests, Core Web Vitals or real-user performance measurement, authenticated-flow checks, and audits of other routes. This report evaluates the listed rules against the submitted URL's fetched response; it is not a guarantee of overall security or accessibility.</p>
 
         {report.metrics && Object.keys(report.metrics).length > 0 && (
           <div className="mt-5 pt-4 border-t border-slate-100 flex flex-wrap gap-x-6 gap-y-2 text-xs text-slate-600 font-mono">
