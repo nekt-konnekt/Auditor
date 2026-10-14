@@ -39,7 +39,7 @@ test('rejects local, private, link-local, documentation, and reserved IPv4 targe
 });
 
 test('rejects local and non-global IPv6 targets', async () => {
-  for (const target of ['http://[::1]/', 'http://[fd00::1]/', 'http://[fe80::1]/', 'http://[::ffff:127.0.0.1]/', 'http://[2001:0000:4136:e378:8000:63bf:3fff:fdd2]/', 'http://[2002:c000:0201::]/', 'http://[64:ff9b::a00:1]/']) {
+  for (const target of ['http://[::1]/', 'http://[fd00::1]/', 'http://[fe80::1]/', 'http://[::ffff:127.0.0.1]/', 'http://[2001:0000:4136:e378:8000:63bf:3fff:fdd2]/', 'http://[2001:1::]/', 'http://[2002:c000:0201::]/', 'http://[64:ff9b::a00:1]/']) {
     await assert.rejects(validatePublicHttpUrl(target), /Local and private network targets are not allowed/);
   }
 });
