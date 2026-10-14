@@ -44,7 +44,7 @@ export function filterEvidenceBackedIssues(
   return candidateIssues.flatMap((item: any, idx: number) => {
     if (!item || typeof item !== 'object') return [];
     const evidence = typeof item.evidence === 'string' ? item.evidence.trim() : '';
-    const evidenceIsObserved = evidence.length > 0
+    const evidenceIsObserved = evidence.length >= 12
       && (observableText.includes(evidence) || observedHeaders.includes(evidence));
     if (!evidenceIsObserved || item.severity === 'passed') return [];
     if (
