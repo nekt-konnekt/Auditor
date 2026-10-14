@@ -14,6 +14,40 @@ const PORT = Number(process.env.PORT) || 3000;
 const isProduction = process.env.NODE_ENV === 'production';
 
 app.disable('x-powered-by');
+
+// Internal-tool access gate. In production, the app fails closed unless both
+// credentials are configured. Browser Basic Auth protects the UI and API.
+app.use((req, res, next) => {
+  if (req.path === '/api/health') return next();
+  if (!isProduction) return next();
+
+  const username = process.env.AUDITOR_USERNAME;
+  const password = process.env.AUDITOR_PASSWORD;
+  if (!username || !password) {
+    return res.status(503).send('Auditor access is not configured.');
+  }
+
+  res.setHeader('WWW-Authenticate', 'Basic realm="Auditor Internal", charset="UTF-8"');
+  const header = req.headers.authorization || '';
+  if (!header.startsWith('Basic ')) {
+    return res.status(401).send('Authentication required.');
+  }
+
+  let decoded = '';
+  try {
+    decoded = Buffer.from(header.slice(6), 'base64').toString('utf8');
+  } catch {
+    return res.status(401).send('Authentication required.');
+  }
+
+  const separator = decoded.indexOf(':');
+  const suppliedUser = separator >= 0 ? decoded.slice(0, separator) : '';
+  const suppliedPassword = separator >= 0 ? decoded.slice(separator + 1) : '';
+  if (suppliedUser !== username || suppliedPassword !== password) {
+    return res.status(401).send('Authentication required.');
+  }
+  return next();
+});
 if (isProduction) app.set('trust proxy', 1);
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
