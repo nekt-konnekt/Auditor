@@ -32,7 +32,7 @@ export function generateAuditMarkdown(report: AuditReport): string {
 - **Target Type**: ${report.target.type.toUpperCase()}
 - **${scoreLabel}**: **${report.overallScore} / 100**
 - **Scoring note**: This is a severity-weighted score, not the percentage of checks passed.
-${report.target.responseTimeMs !== undefined ? `- **Server Response Time**: ${report.target.responseTimeMs} ms\n` : ''}
+${report.target.responseTimeMs !== undefined ? `- **Initial HTML Fetch Duration**: ${report.target.responseTimeMs} ms\n` : ''}
 ${report.target.statusCode !== undefined ? `- **HTTP Status**: ${report.target.statusCode}\n` : ''}
 ${report.target.language ? `- **Language**: ${report.target.language}\n` : ''}
 ${isHttpErrorResponse ? `\n> **Target returned HTTP ${report.target.statusCode}.** This report describes the returned error response, not necessarily the intended website page. SEO and accessibility findings may not apply to the intended page.\n` : ''}
