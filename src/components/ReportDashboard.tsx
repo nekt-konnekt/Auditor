@@ -97,7 +97,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
   const targetLabel =
     report.target.type === 'url'
       ? report.target.target
-      : report.target.filename || 'Source Code File';
+      : report.target.filename || (report.target.type === 'repository' ? 'GitHub Repository' : 'Source Code File');
   const isHttpErrorResponse = report.target.type === 'url'
     && typeof report.target.statusCode === 'number'
     && report.target.statusCode >= 400;
@@ -181,7 +181,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
         {/* Overall Score */}
         <div className="col-span-2 md:col-span-1 p-5 rounded-xl border border-slate-200 bg-white shadow-2xs">
           <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">
-            {isHttpErrorResponse ? 'Diagnostic Score · Error Response' : 'Overall Health'}
+            {isHttpErrorResponse ? 'Diagnostic Score · Error Response' : report.target.type === 'repository' ? 'Repository Hygiene Score' : report.target.type === 'code' ? 'Code Diagnostic Score' : 'Overall Health'}
           </span>
           <div className="mt-2 flex items-baseline gap-1">
             <span className="text-4xl font-extrabold text-slate-900 font-mono tabular-nums">
@@ -257,7 +257,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
         {/* Performance / Quality Category */}
         <div className="p-5 rounded-xl border border-slate-200 bg-white shadow-2xs">
           <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">
-            {report.target.type === 'url' ? 'Performance' : 'Code Quality'}
+            {report.target.type === 'url' ? 'Performance' : report.target.type === 'repository' ? 'Repository Quality' : 'Code Quality'}
           </span>
           <div className="mt-2 flex items-baseline gap-1">
             <span className="text-3xl font-extrabold text-slate-900 font-mono tabular-nums">
@@ -283,7 +283,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
         <p className="text-sm text-slate-700 leading-relaxed">
           {report.summary}
         </p>
-        <p className="mt-3 text-xs leading-relaxed text-slate-500">Not performed: browser rendering tests, Core Web Vitals or real-user performance measurement, authenticated-flow checks, and audits of other routes. This report evaluates the listed rules against the submitted URL's fetched response; it is not a guarantee of overall security or accessibility.</p>
+        <p className="mt-3 text-xs leading-relaxed text-slate-500">{report.target.type === 'url' ? 'Not performed: browser rendering tests, Core Web Vitals or real-user performance measurement, authenticated-flow checks, and audits of other routes. This report evaluates listed rules against the submitted URL response; it is not a guarantee of overall security or accessibility.' : report.target.type === 'repository' ? 'Coverage: public repository metadata and selected root-level files on the default branch only. Not performed: full source-tree or git-history scanning, secret scanning across all files, dependency vulnerability database checks, private repository review, or deployed runtime testing. This is a repository-hygiene review, not a complete security audit.' : 'Coverage: only the supplied source-code snippet was inspected. Not performed: full-repository review, dependency analysis, build/runtime testing, authentication-flow review, or validation of surrounding application context. Findings are diagnostic signals, not proof of exploitability or a guarantee that other issues are absent.'}</p>
 
         {report.metrics && Object.keys(report.metrics).length > 0 && (
           <div className="mt-5 pt-4 border-t border-slate-100 flex flex-wrap gap-x-6 gap-y-2 text-xs text-slate-600 font-mono">
