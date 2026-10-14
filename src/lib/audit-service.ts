@@ -63,11 +63,18 @@ export async function executeAudit(payload: AuditRequestPayload): Promise<AuditR
       responseTimeMs,
     });
 
-    const aiResult = await analyzeWithGemini('url', url.toString(), html, {
-      statusCode: response.status,
-      responseTimeMs,
-      headers: headersMap,
-    });
+    // Error pages are useful to inspect, but AI analysis can mistake their markup
+    // for the intended page. Keep these reports deterministic and label their limits.
+    const aiResult = response.ok
+      ? await analyzeWithGemini('url', url.toString(), html, {
+          statusCode: response.status,
+          responseTimeMs,
+          headers: headersMap,
+        })
+      : {
+          summary: `The target returned HTTP ${response.status}. This report describes the returned error response, not necessarily the intended website page. Resolve the HTTP status and rerun the audit before relying on SEO or accessibility conclusions.`,
+          additionalIssues: [],
+        };
 
     const allIssues = [...deterministicIssues, ...aiResult.additionalIssues];
     const { overallScore, categories } = calculateAuditScores(allIssues);
