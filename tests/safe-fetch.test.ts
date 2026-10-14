@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
-import { createServer, type Server } from 'node:http';
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import { gzipSync } from 'node:zlib';
 import type { AddressInfo } from 'node:net';
 import test from 'node:test';
 import { requestPinnedPublicResponse, resolvePublicRedirect, validatePublicHttpUrl } from '../src/lib/safe-fetch.ts';
 
-async function startServer(handler: Parameters<typeof createServer>[0]): Promise<{ server: Server; port: number }> {
+async function startServer(handler: (request: IncomingMessage, response: ServerResponse) => void): Promise<{ server: Server; port: number }> {
   const server = createServer(handler);
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject);
@@ -38,7 +39,7 @@ test('rejects local, private, link-local, documentation, and reserved IPv4 targe
 });
 
 test('rejects local and non-global IPv6 targets', async () => {
-  for (const target of ['http://[::1]/', 'http://[fd00::1]/', 'http://[fe80::1]/', 'http://[::ffff:127.0.0.1]/']) {
+  for (const target of ['http://[::1]/', 'http://[fd00::1]/', 'http://[fe80::1]/', 'http://[::ffff:127.0.0.1]/', 'http://[2001:0000:4136:e378:8000:63bf:3fff:fdd2]/', 'http://[2002:c000:0201::]/', 'http://[64:ff9b::a00:1]/']) {
     await assert.rejects(validatePublicHttpUrl(target), /Local and private network targets are not allowed/);
   }
 });
@@ -83,6 +84,32 @@ test('outbound requests use the validated IP while preserving the original Host 
     assert.equal(response.status, 200);
     assert.equal(response.headers.get('x-test-host'), 'example.com:' + port);
     assert.equal(await response.text(), '<html><title>Pinned</title></html>');
+  } finally {
+    await stopServer(server);
+  }
+});
+
+
+test('compressed HTML responses are decoded before analysis', async () => {
+  const html = '<html><title>Compressed</title></html>';
+  const compressed = gzipSync(Buffer.from(html));
+  const { server, port } = await startServer((_request, response) => {
+    response.writeHead(200, {
+      'content-type': 'text/html; charset=utf-8',
+      'content-encoding': 'gzip',
+      'content-length': String(compressed.byteLength),
+    });
+    response.end(compressed);
+  });
+  try {
+    const response = await requestPinnedPublicResponse({
+      url: new URL('http://example.com:' + port + '/compressed'),
+      address: '127.0.0.1',
+      family: 4,
+    }, 1000);
+    assert.equal(await response.text(), html);
+    assert.equal(response.headers.get('content-encoding'), null);
+    assert.equal(response.headers.get('content-length'), null);
   } finally {
     await stopServer(server);
   }
