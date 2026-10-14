@@ -205,10 +205,10 @@ export function runUrlDeterministicAudit(input: UrlAuditInput): {
     issues.push({
       id: 'seo-title-missing',
       category: 'seo',
-      severity: 'high',
+      severity: 'medium',
       title: 'Missing <title> Element',
-      description: 'The HTML document does not contain a <title> tag in the <head>.',
-      impact: 'Critical search indexing penalty; search engines cannot determine page subject and browser tabs show URL.',
+      description: 'No title element was found in the fetched HTML response. Browser-rendered or other-route content was not inspected.',
+      impact: 'Browsers and search engines may have less descriptive information for this page; this observation does not establish a specific ranking penalty.',
       remediation: 'Add a descriptive <title> tag between 30 and 60 characters inside <head>.',
     });
   } else if (title.length < 20) {
@@ -238,8 +238,8 @@ export function runUrlDeterministicAudit(input: UrlAuditInput): {
       id: 'seo-title-pass',
       category: 'seo',
       severity: 'passed',
-      title: 'Optimal Title Length and Presence',
-      description: `Title is well-formed (${title.length} characters).`,
+      title: 'Page Title Present and Within Configured Length Range',
+      description: 'A title element is present and contains ' + title.length + ' characters; this check does not assess relevance, uniqueness, or search-engine display.',
       evidence: title,
       remediation: 'Maintain keyword relevance and unique titles across different routes.',
     });
@@ -253,11 +253,11 @@ export function runUrlDeterministicAudit(input: UrlAuditInput): {
     issues.push({
       id: 'seo-desc-missing',
       category: 'seo',
-      severity: 'high',
+      severity: 'medium',
       title: 'Missing Meta Description',
-      description: 'The page lacks a <meta name="description"> tag.',
-      impact: 'Search engines will auto-generate snippets from random body text, decreasing organic click-through rates (CTR).',
-      remediation: 'Add a compelling meta description tag of 120–160 characters summarizing the page value proposition.',
+      description: 'No meta description was found in the fetched HTML response.',
+      impact: 'Search engines may generate their own snippets; a missing description does not by itself prove a ranking or click-through penalty.',
+      remediation: 'Consider adding a concise, page-specific description that accurately summarizes the content. Search engines may still choose a different snippet.',
     });
   } else if (metaDesc.length < 50 || metaDesc.length > 165) {
     issues.push({
@@ -274,8 +274,8 @@ export function runUrlDeterministicAudit(input: UrlAuditInput): {
       id: 'seo-desc-pass',
       category: 'seo',
       severity: 'passed',
-      title: 'Meta Description Tag Optimized',
-      description: `Meta description is present with ideal length (${metaDesc.length} chars).`,
+      title: 'Meta Description Present and Within Configured Length Range',
+      description: 'A meta description is present and contains ' + metaDesc.length + ' characters; this check does not assess its accuracy, uniqueness, or likely search performance.',
       evidence: metaDesc,
       remediation: 'Ensure unique descriptions per page.',
     });
@@ -338,19 +338,19 @@ export function runUrlDeterministicAudit(input: UrlAuditInput): {
     issues.push({
       id: 'seo-viewport',
       category: 'seo',
-      severity: 'high',
+      severity: 'medium',
       title: 'Missing Viewport Meta Tag',
-      description: 'The page does not declare a mobile viewport tag.',
-      impact: 'Mobile browsers will render the desktop version in 980px zoom mode, failing mobile-friendliness audits.',
-      remediation: 'Add `<meta name="viewport" content="width=device-width, initial-scale=1.0">`.',
+      description: 'No viewport meta tag was found in the fetched HTML response.',
+      impact: 'The absence may affect mobile layout behavior, but browser rendering was not tested in this audit.',
+      remediation: 'Add a viewport declaration appropriate for the page, commonly <meta name="viewport" content="width=device-width, initial-scale=1">.',
     });
   } else {
     issues.push({
       id: 'seo-viewport-pass',
       category: 'seo',
       severity: 'passed',
-      title: 'Responsive Mobile Viewport Declared',
-      description: 'Viewport tag is present and configured.',
+      title: 'Viewport Meta Tag Present',
+      description: 'A viewport meta tag was observed. This check does not validate its settings or confirm responsive rendering.',
       evidence: viewport,
       remediation: 'Avoid user-scalable=no to preserve accessibility zoom capabilities.',
     });
@@ -447,8 +447,8 @@ export function runUrlDeterministicAudit(input: UrlAuditInput): {
       id: 'a11y-h1-pass',
       category: 'accessibility',
       severity: 'passed',
-      title: 'Proper Single <h1> Document Structure',
-      description: 'The page has a clear single <h1> element.',
+      title: 'Single H1 Element Detected',
+      description: 'Exactly one h1 element was found in the fetched HTML; heading hierarchy and visual presentation were not evaluated.',
       evidence: $('h1').first().text().trim().substring(0, 60),
       remediation: 'Maintain logical progression (H1 -> H2 -> H3).',
     });
