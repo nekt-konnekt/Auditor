@@ -1,0 +1,8 @@
+{
+  "name": "Auditor — Web & Code Intelligence",
+  "description": "Comprehensive website audit engine and code vulnerability scanner with live inspection, SEO metrics, security header checks, and Markdown reports.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
