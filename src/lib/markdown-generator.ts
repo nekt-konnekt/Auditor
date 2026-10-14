@@ -20,21 +20,30 @@ export function generateAuditMarkdown(report: AuditReport): string {
   const dateFormatted = new Date(report.createdAt).toUTCString();
   const targetLabel = report.target.type === 'url' ? report.target.target : (report.target.filename || 'Code Snippet');
 
+  const isHttpErrorResponse = report.target.type === 'url'
+    && typeof report.target.statusCode === 'number'
+    && report.target.statusCode >= 400;
+  const scoreLabel = isHttpErrorResponse ? 'Diagnostic Score (Error Response)' : 'Severity-weighted Diagnostic Score';
+
   let md = `# Audit Report: ${targetLabel}
 
 - **Audit Date**: ${dateFormatted}
 - **Audit ID**: \`${report.id}\`
 - **Target Type**: ${report.target.type.toUpperCase()}
-- **Overall Health Score**: **${report.overallScore} / 100**
-${report.target.responseTimeMs ? `- **Response Time**: ${report.target.responseTimeMs} ms\n` : ''}
-${report.target.statusCode ? `- **HTTP Status**: ${report.target.statusCode}\n` : ''}
+- **${scoreLabel}**: **${report.overallScore} / 100**
+- **Scoring note**: This is a severity-weighted score, not the percentage of checks passed.
+${report.target.responseTimeMs !== undefined ? `- **Server Response Time**: ${report.target.responseTimeMs} ms\n` : ''}
+${report.target.statusCode !== undefined ? `- **HTTP Status**: ${report.target.statusCode}\n` : ''}
 ${report.target.language ? `- **Language**: ${report.target.language}\n` : ''}
+${isHttpErrorResponse ? `\n> **Target returned HTTP ${report.target.statusCode}.** This report describes the returned error response, not necessarily the intended website page. SEO and accessibility findings may not apply to the intended page.\n` : ''}
 
 ---
 
 ## Executive Summary
 
 ${report.summary}
+
+> Coverage limitation: this report evaluates the listed rules against the fetched response. It does not execute browser-based tests, validate every route, or guarantee overall security, accessibility, or real-user performance.
 
 ---
 
