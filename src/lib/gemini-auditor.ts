@@ -57,8 +57,8 @@ Observed Headers: ${JSON.stringify(contextMeta.headers || {})}
 HTML Snippet / Structure:
 ${contentSnippet.substring(0, 3000)}
 
-Identify any subtle security vulnerabilities, missing best practices (like Content Security Policy, Permissions-Policy, Cookie flags, CORS, SEO meta, or accessibility pitfalls).
-Provide an executive summary and a list of specific actionable issues with severity ratings.`
+Report only issues directly supported by the supplied snapshot. Do not infer that a header, cookie, route, runtime behavior, or security control is missing unless the supplied evidence supports that conclusion. Do not report cookie attributes unless a relevant Set-Cookie header is present; do not report CORS behavior unless relevant CORS headers are present. Every issue must include an exact evidence excerpt copied from the supplied headers or HTML. If you cannot cite an exact excerpt, omit the issue. Do not return "passed" findings; deterministic checks handle pass results. Treat recommendations and best practices as low-severity observations unless concrete impact is evidenced.
+Provide a concise summary limited to the observed snapshot, not a claim that the whole website is secure or insecure.`
         : `You are an expert software security auditor and static analysis specialist.
 Analyze this source code (${contextMeta.language || 'text'}):
 File: ${contextMeta.filename || 'Snippet'}
@@ -67,13 +67,14 @@ Source:
 ${contentSnippet.substring(0, 4000)}
 \`\`\`
 
-Perform an in-depth vulnerability audit covering OWASP Top 10, CWE patterns, logic errors, race conditions, authentication/authorization gaps, input validation, and code smells.
-For each finding, provide:
-1. Exact severity (critical, high, medium, low, or passed)
-2. Category (security, quality, performance)
-3. Clear human title and description
-4. Risk impact
-5. Concrete remediation instructions and a code snippet showing the fix.`;
+Review only the source text provided. Do not infer surrounding application behavior, runtime exploitability, authentication flow, deployment configuration, or missing controls that are not visible in the supplied code. A suspicious API or pattern is not automatically a vulnerability; explain the condition required for risk. Every finding must include an exact evidence excerpt copied verbatim from the supplied source. If no exact excerpt supports a finding, omit it. Do not return "passed" findings; deterministic checks handle pass results.
+For each supported finding, provide:
+1. Severity (critical, high, medium, or low), calibrated to the evidence
+2. Category (security, quality, performance, seo, or accessibility)
+3. Clear title and description
+4. Risk impact, including uncertainty where relevant
+5. Concrete remediation
+6. An exact evidence excerpt copied verbatim from the supplied source.`;
 
     const response = await ai.models.generateContent({
       model: 'gemini-3.8-flash',
@@ -117,6 +118,10 @@ For each finding, provide:
                     type: Type.STRING,
                     description: 'Concrete actionable steps to fix or mitigate',
                   },
+                  evidence: {
+                    type: Type.STRING,
+                    description: 'Exact verbatim excerpt from the provided headers, HTML, or source code that supports this finding.',
+                  },
                   originalCode: {
                     type: Type.STRING,
                     description: 'Optional snippet of problematic code or selector',
@@ -126,7 +131,7 @@ For each finding, provide:
                     description: 'Optional proposed secure code replacement or fix',
                   },
                 },
-                required: ['category', 'severity', 'title', 'description', 'remediation'],
+                required: ['category', 'severity', 'title', 'description', 'remediation', 'evidence'],
               },
             },
           },
@@ -136,26 +141,43 @@ For each finding, provide:
     });
 
     const parsed = JSON.parse(response.text || '{}');
-    const additionalIssues: AuditIssue[] = (parsed.issues || []).map((item: any, idx: number) => {
-      const validCategories = ['security', 'seo', 'accessibility', 'performance', 'quality'];
-      const validSeverities = ['critical', 'high', 'medium', 'low', 'passed'];
+    const candidateIssues = Array.isArray(parsed.issues) ? parsed.issues : [];
+    const validCategories = ['security', 'seo', 'accessibility', 'performance', 'quality'];
+    const validSeverities = ['critical', 'high', 'medium', 'low'];
+    const observableText = contentSnippet.substring(0, type === 'url' ? 3000 : 4000);
+    const observedHeaders = type === 'url' ? JSON.stringify(contextMeta.headers || {}) : '';
+
+    // Treat model output as untrusted. Only retain findings whose exact evidence
+    // appears in the supplied snapshot; discard unsupported and AI-generated pass claims.
+    const additionalIssues: AuditIssue[] = candidateIssues.flatMap((item: any, idx: number) => {
+      if (!item || typeof item !== 'object') return [];
+      const evidence = typeof item.evidence === 'string' ? item.evidence.trim() : '';
+      const evidenceIsObserved = evidence.length > 0
+        && (observableText.includes(evidence) || observedHeaders.includes(evidence));
+      if (!evidenceIsObserved || item.severity === 'passed') return [];
+      if (
+        typeof item.title !== 'string' || !item.title.trim()
+        || typeof item.description !== 'string' || !item.description.trim()
+        || typeof item.remediation !== 'string' || !item.remediation.trim()
+      ) return [];
 
       const cat = validCategories.includes(item.category) ? item.category : (type === 'url' ? 'seo' : 'security');
       const sev = validSeverities.includes(item.severity) ? item.severity : 'medium';
 
-      return {
+      return [{
         id: `ai-finding-${idx + 1}-${Date.now().toString(36)}`,
         category: cat,
         severity: sev,
         title: item.title,
         description: item.description,
-        impact: item.impact,
+        impact: typeof item.impact === 'string' ? item.impact : undefined,
         remediation: item.remediation,
+        evidence,
         codeSnippet: item.originalCode || item.proposedFix ? {
           original: item.originalCode,
           proposed: item.proposedFix,
         } : undefined,
-      };
+      }];
     });
 
     return {
