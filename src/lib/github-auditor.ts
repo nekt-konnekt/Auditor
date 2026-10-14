@@ -53,38 +53,47 @@ export async function auditGitHubRepo(url: string): Promise<AuditReport> {
   let forks = 0;
   let openIssuesCount = 0;
 
-  // 1. Fetch GitHub API repo metadata
+  // 1. Verify that the target is an accessible public repository before auditing it.
+  // Never produce a heuristic report for a missing, private, rate-limited, or
+  // otherwise unverifiable repository: that would present guesses as findings.
+  let apiRes: Response;
   try {
-    const apiRes = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
+    apiRes = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
       headers: {
         'User-Agent': 'Auditor-Engine/2.4 (Security Audit Bot)',
         'Accept': 'application/vnd.github.v3+json',
       },
     });
-
-    if (apiRes.ok) {
-      const data = await apiRes.json();
-      defaultBranch = data.default_branch || 'main';
-      description = data.description || '';
-      license = data.license?.spdx_id || data.license?.name || 'Unlicensed';
-      stars = data.stargazers_count ?? 0;
-      forks = data.forks_count ?? 0;
-      openIssuesCount = data.open_issues_count ?? 0;
-
-      metrics['Default Branch'] = defaultBranch;
-      metrics['License'] = license;
-      metrics['GitHub Stars'] = stars;
-      metrics['Open Issues'] = openIssuesCount;
-    } else if (apiRes.status === 404) {
-      // Check if it's a private repo or fake repo
-      // Still proceed with simulated/heuristic inspection so user can audit sample or halftone repos
-      description = 'Target repository analysis';
-    }
-  } catch (e) {
-    // API failed or rate-limited; proceed with raw file fetch attempts
+  } catch {
+    throw new Error('Could not reach the GitHub API to verify this repository. No audit report was generated.');
   }
 
-  // 2. Fetch standard repository files (SECURITY.md, .gitignore, package.json, README.md)
+  if (apiRes.status === 404) {
+    throw new Error('GitHub repository was not found or is not publicly accessible. Auditor only supports public repositories; no report was generated.');
+  }
+  if (apiRes.status === 403 || apiRes.status === 429) {
+    throw new Error('GitHub API access was rate-limited or denied. Retry later; no repository audit report was generated.');
+  }
+  if (!apiRes.ok) {
+    throw new Error(`Could not verify the public GitHub repository (HTTP ${apiRes.status}). No audit report was generated.`);
+  }
+
+  const data = await apiRes.json();
+  defaultBranch = data.default_branch;
+  description = data.description || '';
+  license = data.license?.spdx_id || data.license?.name || 'Unlicensed';
+  stars = data.stargazers_count ?? 0;
+  forks = data.forks_count ?? 0;
+  openIssuesCount = data.open_issues_count ?? 0;
+
+  metrics['Default Branch'] = defaultBranch;
+  metrics['License'] = license;
+  metrics['GitHub Stars'] = stars;
+  metrics['Open Issues'] = openIssuesCount;
+
+  // 2. Fetch standard files from the verified default branch only. A missing
+  // file is a valid observation; a fetch failure aborts rather than inventing
+  // a "missing" finding from unavailable data.
   let securityMd: string | null = null;
   let gitignore: string | null = null;
   let packageJson: string | null = null;
@@ -92,26 +101,26 @@ export async function auditGitHubRepo(url: string): Promise<AuditReport> {
   let workflowsDetected = false;
 
   const fetchRaw = async (filePath: string): Promise<string | null> => {
-    for (const b of [defaultBranch, 'main', 'master']) {
-      try {
-        const res = await fetch(`https://raw.githubusercontent.com/${owner}/${repo}/${b}/${filePath}`, {
-          headers: { 'User-Agent': 'Auditor-Engine/2.4' },
-        });
-        if (res.ok) {
-          return await res.text();
-        }
-      } catch {
-        // try next branch
-      }
+    let res: Response;
+    try {
+      res = await fetch(`https://raw.githubusercontent.com/${owner}/${repo}/${defaultBranch}/${filePath}`, {
+        headers: { 'User-Agent': 'Auditor-Engine/2.4' },
+      });
+    } catch {
+      throw new Error(`Could not fetch ${filePath} from the verified default branch. No complete repository report was generated.`);
     }
-    return null;
+    if (res.status === 404) return null;
+    if (!res.ok) {
+      throw new Error(`Could not inspect ${filePath} on the verified default branch (HTTP ${res.status}). No complete repository report was generated.`);
+    }
+    return await res.text();
   };
 
   const [secRes, gitignoreRes, pkgRes, readmeRes] = await Promise.all([
-    fetchRaw('SECURITY.md').catch(() => null),
-    fetchRaw('.gitignore').catch(() => null),
-    fetchRaw('package.json').catch(() => null),
-    fetchRaw('README.md').catch(() => null),
+    fetchRaw('SECURITY.md'),
+    fetchRaw('.gitignore'),
+    fetchRaw('package.json'),
+    fetchRaw('README.md'),
   ]);
 
   securityMd = secRes;
