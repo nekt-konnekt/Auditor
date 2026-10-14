@@ -32,7 +32,9 @@ function categoryNameForReport(report: AuditReport, category: Category): string 
 
 export function generateAuditMarkdown(report: AuditReport): string {
   const dateFormatted = new Date(report.createdAt).toUTCString();
-  const targetLabel = report.target.type === 'url' ? report.target.target : (report.target.filename || 'Code Snippet');
+  const targetLabel = report.target.type === 'url' || report.target.type === 'repository'
+    ? report.target.target
+    : (report.target.filename || 'Code Snippet');
 
   const isHttpErrorResponse = report.target.type === 'url'
     && typeof report.target.statusCode === 'number'
