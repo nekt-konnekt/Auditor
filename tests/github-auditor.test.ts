@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { auditGitHubRepo, parseGitHubUrl } from '../src/lib/github-auditor.ts';
+import { generateAuditMarkdown } from '../src/lib/markdown-generator.ts';
 
 test('GitHub URL parser accepts a public owner/repository URL', () => {
   assert.deepEqual(parseGitHubUrl('https://github.com/octocat/Hello-World'), {
@@ -76,6 +77,12 @@ test('repository audit distinguishes an unclassified license file from no licens
 
   try {
     const report = await auditGitHubRepo('https://github.com/octocat/Hello-World');
+    assert.equal(report.target.type, 'repository');
+    const markdown = generateAuditMarkdown(report);
+    assert.match(markdown, /Target Type\*\*: REPOSITORY/);
+    assert.match(markdown, /Repository Hygiene Diagnostic Score/);
+    assert.match(markdown, /did not scan all source files/i);
+    assert.doesNotMatch(markdown, /\{#if report\.target\.type/);
     assert.equal(report.issues.some((item) => item.id === 'gh-license-missing'), false);
     assert.equal(report.issues.some((item) => item.id === 'gh-license-unclassified'), true);
     assert.match(report.summary, /did not scan all source files/i);
