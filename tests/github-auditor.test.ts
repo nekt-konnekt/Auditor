@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { auditGitHubRepo, parseGitHubUrl } from '../src/lib/github-auditor.ts';
+import { auditGitHubRepo, fetchWithLimits, parseGitHubUrl } from '../src/lib/github-auditor.ts';
 import { generateAuditMarkdown } from '../src/lib/markdown-generator.ts';
 
 test('GitHub URL parser accepts a public owner/repository URL', () => {
@@ -93,6 +93,34 @@ test('repository audit distinguishes an unclassified license file from no licens
     assert.equal(report.issues.some((item) => item.id === 'gh-license-unclassified'), true);
     assert.match(report.summary, /did not scan all source files/i);
     assert.equal(report.issues.find((item) => item.id === 'gh-gitignore-env')?.severity, 'medium');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+
+test('GitHub fetch helper rejects streamed responses that exceed the byte limit', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async () => new Response('123456789', { status: 200 })) as typeof fetch;
+  try {
+    await assert.rejects(fetchWithLimits('https://example.test/large', {}, { maxBytes: 8 }), /exceeded.*size limit/i);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('GitHub fetch helper aborts requests that exceed the time limit', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = ((_input: RequestInfo | URL, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+    const signal = init?.signal;
+    if (signal?.aborted) {
+      reject(signal.reason);
+      return;
+    }
+    signal?.addEventListener('abort', () => reject(signal.reason), { once: true });
+  })) as typeof fetch;
+  try {
+    await assert.rejects(fetchWithLimits('https://example.test/slow', {}, { timeoutMs: 10 }), /timed out|abort/i);
   } finally {
     globalThis.fetch = originalFetch;
   }
