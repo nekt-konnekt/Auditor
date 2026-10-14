@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { filterEvidenceBackedIssues } from '../src/lib/gemini-auditor.ts';
+import { analyzeWithGemini, filterEvidenceBackedIssues } from '../src/lib/gemini-auditor.ts';
 
 const candidate = {
   category: 'security',
@@ -40,4 +40,20 @@ test('website findings can cite observed response headers', () => {
     headers: { 'strict-transport-security': 'max-age=31536000' },
   });
   assert.equal(result.length, 1);
+});
+
+test('fallback summary describes selected checks without claiming a comprehensive OWASP audit', async () => {
+  const previousKey = process.env.GEMINI_API_KEY;
+  delete process.env.GEMINI_API_KEY;
+  try {
+    const result = await analyzeWithGemini('code', 'example.ts', 'const value = 1;', {
+      filename: 'example.ts',
+      language: 'typescript',
+    });
+    assert.match(result.summary, /Selected deterministic pattern checks ran on the supplied snippet/i);
+    assert.doesNotMatch(result.summary, /comprehensive|OWASP patterns/i);
+  } finally {
+    if (previousKey === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = previousKey;
+  }
 });
