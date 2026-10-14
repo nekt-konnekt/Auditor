@@ -39,7 +39,11 @@ function isBlockedIpv6(address: string): boolean {
   // Permit only global-unicast space and exclude known special-purpose ranges.
   if (!value.startsWith('2') && !value.startsWith('3')) return true;
   if (/^2001:db8:/i.test(value)) return true;
-  if (/^2001:0{1,4}:/i.test(value)) return true; // Teredo/special protocol assignments
+  if (value.startsWith('2001:')) {
+    const secondHextet = value.split(':')[1] || '0';
+    const secondValue = Number.parseInt(secondHextet, 16);
+    if (Number.isFinite(secondValue) && secondValue <= 0x01ff) return true; // Special-purpose 2001::/23 assignments
+  }
   if (/^2002:/i.test(value)) return true; // 6to4 embeds an IPv4 destination
   if (/^64:ff9b:/i.test(value)) return true; // NAT64 well-known prefix may embed IPv4 destinations
   return false;
