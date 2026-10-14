@@ -62,7 +62,7 @@ test('HSTS is not reported as missing on HTTP because browsers ignore HSTS recei
 });
 
 test('missing HSTS remains a finding for HTTPS responses', () => {
-  const headers = { ...secureHeaders };
+  const headers: Record<string, string> = { ...secureHeaders };
   delete headers['strict-transport-security'];
   const result = audit({ headers });
   assert.equal(result.metrics['HSTS Present'], false);
