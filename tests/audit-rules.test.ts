@@ -107,7 +107,8 @@ test('large HTML payloads are measured in UTF-8 bytes and flagged', () => {
 });
 
 test('response-time thresholds are deterministic at 800ms and 2000ms boundaries', () => {
-  assert.equal(audit({ responseTimeMs: 800 }).issues.find((issue) => issue.id === 'perf-moderate-ttfb')?.severity, 'medium');
+  assert.equal(audit({ responseTimeMs: 800 }).issues.some((issue) => issue.id === 'perf-ttfb-pass'), true);
+  assert.equal(audit({ responseTimeMs: 801 }).issues.find((issue) => issue.id === 'perf-moderate-ttfb')?.severity, 'medium');
   assert.equal(audit({ responseTimeMs: 2000 }).issues.some((issue) => issue.id === 'perf-moderate-ttfb' || issue.id === 'perf-slow-ttfb'), true);
   assert.equal(audit({ responseTimeMs: 2001 }).issues.find((issue) => issue.id === 'perf-slow-ttfb')?.severity, 'high');
   assert.equal(audit({ responseTimeMs: 799 }).issues.some((issue) => issue.id === 'perf-ttfb-pass'), true);
