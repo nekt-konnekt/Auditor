@@ -58,16 +58,16 @@ export function runUrlDeterministicAudit(input: UrlAuditInput): {
 
   // Check 2: Content-Security-Policy
   const csp = headers['content-security-policy'];
-  const weakCspPattern = /(?:unsafe-inline|unsafe-eval|(?:script-src|default-src)\s+[^;]*\*)/i;
+  const weakCspPattern = /(?:^|;)\s*(?:script-src|default-src)\s+[^;]*(?:'unsafe-inline'|'unsafe-eval'|\*)/i;
   metrics['CSP Present'] = !!csp;
   if (!csp) {
     issues.push({
       id: 'sec-csp',
       category: 'security',
-      severity: 'high',
+      severity: 'medium',
       title: 'Missing Content-Security-Policy (CSP) Header',
-      description: 'The HTTP response is missing a Content-Security-Policy header to restrict resource loading.',
-      impact: 'Significantly increases vulnerability to Cross-Site Scripting (XSS), clickjacking, and data injection attacks.',
+      description: 'No Content-Security-Policy header was observed in this response. CSP is a defense-in-depth control; its absence alone does not establish that an XSS vulnerability exists.',
+      impact: 'Without CSP, the browser has fewer policy-based restrictions if a separate injection flaw is present.',
       remediation: "Configure the 'Content-Security-Policy' header to restrict script-src, object-src, and frame-ancestors to trusted origins only.",
       evidence: 'Header missing from response headers.',
       references: [{ title: 'OWASP CSP Cheat Sheet', url: 'https://cheatsheetseries.owasp.org/cheatsheets/Content_Security_Policy_Cheat_Sheet.html' }],
@@ -89,8 +89,8 @@ export function runUrlDeterministicAudit(input: UrlAuditInput): {
       id: 'sec-csp-pass',
       category: 'security',
       severity: 'passed',
-      title: 'Content-Security-Policy Configured',
-      description: 'The website supplies a Content-Security-Policy header.',
+      title: 'Content-Security-Policy Header Present',
+      description: 'A CSP header was observed and this simple heuristic did not match broad script/default-source patterns. This is not a full policy validator or proof that the policy is effective.',
       evidence: csp.substring(0, 80) + (csp.length > 80 ? '...' : ''),
       remediation: 'Ensure directives are restrictive and avoid "unsafe-inline" where possible.',
     });
@@ -98,60 +98,70 @@ export function runUrlDeterministicAudit(input: UrlAuditInput): {
 
   // Check 3: Strict-Transport-Security (HSTS)
   const hsts = headers['strict-transport-security'];
-  // Browsers ignore HSTS received over HTTP, so its absence on an HTTP response
-  // is not an independent finding. Evaluate HSTS only on HTTPS responses.
-  metrics['HSTS Present'] = isHttps ? !!hsts : 'Not applicable (HTTP)';
-  if (isHttps && !hsts) {
+  const hstsMaxAge = hsts?.match(/(?:^|;)\s*max-age\s*=\s*(\d+)/i);
+  const hstsEffective = Boolean(hstsMaxAge && Number(hstsMaxAge[1]) > 0);
+  // Browsers ignore HSTS received over HTTP, so evaluate effectiveness only
+  // on HTTPS responses. A present header with max-age=0 disables HSTS.
+  metrics['HSTS Present'] = isHttps ? hstsEffective : 'Not applicable (HTTP)';
+  if (isHttps && !hstsEffective) {
     issues.push({
       id: 'sec-hsts',
       category: 'security',
       severity: 'medium',
-      title: 'Missing Strict-Transport-Security (HSTS) Header',
-      description: 'The server does not mandate HTTPS connections via the HSTS response header.',
-      impact: 'Users making initial HTTP requests may be susceptible to SSL stripping attacks before any redirection occurs.',
-      remediation: 'Add `Strict-Transport-Security: max-age=31536000; includeSubDomains; preload` to your server response headers.',
+      title: hsts ? 'Ineffective Strict-Transport-Security (HSTS) Header' : 'Missing Strict-Transport-Security (HSTS) Header',
+      description: hsts
+        ? 'The HSTS header is present but does not contain a positive max-age directive, so browsers may not retain an HTTPS-only policy.'
+        : 'No Strict-Transport-Security header was observed on this HTTPS response.',
+      impact: 'Without an effective HSTS policy, browsers may be less protected against downgrade attempts after an initial HTTP visit.',
+      evidence: hsts || 'Header missing from response headers.',
+      remediation: 'After confirming HTTPS is supported across the intended host scope, configure a positive max-age value and carefully consider includeSubDomains or preload.',
     });
   } else if (isHttps) {
     issues.push({
       id: 'sec-hsts-pass',
       category: 'security',
       severity: 'passed',
-      title: 'HSTS Header Configured',
-      description: 'Strict-Transport-Security is present, enforcing browser HTTPS communication.',
+      title: 'HSTS Header Has a Positive max-age',
+      description: 'The HTTPS response includes a Strict-Transport-Security header with a positive max-age. Scope and preload readiness were not fully evaluated.',
       evidence: hsts,
-      remediation: 'Verify includeSubDomains and preload parameters.',
+      remediation: 'Review host/subdomain scope and preload requirements separately.',
     });
   }
 
   // Check 4: X-Frame-Options
   const xfo = headers['x-frame-options'];
+  const validXfo = Boolean(xfo && /^(DENY|SAMEORIGIN)$/i.test(xfo.trim()));
+  const frameAncestorsDirective = csp?.split(';').map((part) => part.trim())
+    .find((part) => /^frame-ancestors\s+\S+/i.test(part));
+  const hasFrameProtection = validXfo || Boolean(frameAncestorsDirective);
   metrics['X-Frame-Options'] = xfo || 'Not set';
-  if (!xfo && (!csp || !csp.includes('frame-ancestors'))) {
+  if (!hasFrameProtection) {
     issues.push({
       id: 'sec-xfo',
       category: 'security',
       severity: 'medium',
       title: 'Clickjacking Protection Missing (X-Frame-Options)',
-      description: 'Neither X-Frame-Options nor CSP frame-ancestors is configured to prevent embedding in iframes.',
-      impact: 'Allows malicious third-party websites to frame this page and execute clickjacking attacks.',
-      remediation: "Set `X-Frame-Options: SAMEORIGIN` or `DENY`, or specify `frame-ancestors 'self'` in CSP.",
+      description: 'No valid X-Frame-Options value (DENY or SAMEORIGIN) or non-empty CSP frame-ancestors directive was observed.',
+      impact: 'If the page is frameable and sensitive interactions are present, embedding may enable clickjacking. This header check does not demonstrate an exploitable clickjacking flow.',
+      remediation: "Set X-Frame-Options to SAMEORIGIN or DENY, or specify a suitable frame-ancestors directive in CSP.",
+      evidence: xfo || 'No valid frame protection header observed.',
     });
   } else {
     issues.push({
       id: 'sec-xfo-pass',
       category: 'security',
       severity: 'passed',
-      title: 'Clickjacking Defense Enforced',
-      description: 'The page is protected against unauthorized iframe embedding.',
-      evidence: xfo || 'Protected via CSP frame-ancestors',
-      remediation: 'Keep frame restrictions updated for all embedded routes.',
+      title: 'Valid Frame Embedding Restriction Detected',
+      description: 'A supported X-Frame-Options value or non-empty CSP frame-ancestors directive was observed.',
+      evidence: validXfo ? xfo : 'Protected via CSP frame-ancestors',
+      remediation: 'Verify that frame restrictions match the intended embedding policy.',
     });
   }
 
   // Check 5: X-Content-Type-Options
   const xcto = headers['x-content-type-options'];
   metrics['X-Content-Type-Options'] = xcto || 'Not set';
-  if (!xcto || !xcto.toLowerCase().includes('nosniff')) {
+  if (!xcto || xcto.trim().toLowerCase() !== 'nosniff') {
     issues.push({
       id: 'sec-xcto',
       category: 'security',
