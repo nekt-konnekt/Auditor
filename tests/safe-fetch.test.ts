@@ -69,8 +69,8 @@ test('redirect destinations are resolved and validated before they can be reques
 });
 
 test('outbound requests use the validated IP while preserving the original Host header', async () => {
-  let observedHost = '';
-  const { server, port } = await startServer((_request, response) => {
+  const { server, port } = await startServer((request, response) => {
+    response.setHeader('x-test-host', request.headers.host || '');
     response.setHeader('content-type', 'text/html; charset=utf-8');
     response.end('<html><title>Pinned</title></html>');
   });
@@ -80,10 +80,9 @@ test('outbound requests use the validated IP while preserving the original Host 
       address: '127.0.0.1',
       family: 4,
     }, 1000);
-    observedHost = response.headers.get('x-test-host') || '';
     assert.equal(response.status, 200);
+    assert.equal(response.headers.get('x-test-host'), 'example.com:' + port);
     assert.equal(await response.text(), '<html><title>Pinned</title></html>');
-    assert.notEqual(observedHost, ''); // The test server below is updated to echo the original Host.
   } finally {
     await stopServer(server);
   }
