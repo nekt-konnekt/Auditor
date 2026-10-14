@@ -39,6 +39,8 @@ test('clean HTTP 200 page passes the expected deterministic baseline checks', ()
   const result = audit();
   assert.equal(result.metrics['HTTP Status'], 200);
   assert.equal(result.metrics['HTTP Status Class'], '2xx');
+  assert.equal(result.metrics['Browser Runtime Checks'], 'Not performed');
+  assert.equal(result.metrics['Route Coverage'], 'Submitted URL only');
   assert.equal(result.issues.some((issue) => issue.id === 'http-server-error' || issue.id === 'http-client-error'), false);
   assert.equal(result.issues.some((issue) => issue.id === 'sec-csp-pass'), true);
   assert.equal(result.issues.some((issue) => issue.id === 'perf-ttfb-pass'), true);
