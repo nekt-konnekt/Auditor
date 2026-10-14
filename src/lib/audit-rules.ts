@@ -418,7 +418,7 @@ export function runUrlDeterministicAudit(input: UrlAuditInput): {
       title: 'Missing <h1> Primary Heading',
       description: 'No <h1> element was found in the returned HTML. This is a document-structure signal, not by itself proof of an accessibility failure.',
       impact: 'A primary heading can help users, including screen-reader users, understand the page topic and navigate its structure.',
-      remediation: 'Add a descriptive top-level heading where it reflects the page content, and verify the complete heading hierarchy.
+      remediation: 'Add a descriptive top-level heading where it reflects the page content, and verify the complete heading hierarchy.',
     });
   } else if (h1Count > 1) {
     issues.push({
