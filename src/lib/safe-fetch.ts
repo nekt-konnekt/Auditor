@@ -139,12 +139,12 @@ export async function requestPinnedPublicResponse(target: ResolvedPublicTarget, 
   return new Promise<Response>((resolve, reject) => {
     let settled = false;
     let request: any;
-    let timeout: ReturnType<typeof setTimeout>;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
 
     const fail = (error: unknown) => {
       if (settled) return;
       settled = true;
-      clearTimeout(timeout);
+      if (timeout) clearTimeout(timeout);
       request?.destroy();
       reject(error);
     };
