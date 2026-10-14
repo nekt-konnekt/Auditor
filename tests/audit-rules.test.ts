@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { calculateAuditScores, runUrlDeterministicAudit } from '../src/lib/audit-rules.ts';
+import { calculateAuditScores, runCodeDeterministicAudit, runUrlDeterministicAudit } from '../src/lib/audit-rules.ts';
 import type { UrlAuditInput } from '../src/lib/audit-rules.ts';
 
 const cleanHtml = `<!doctype html>
@@ -144,6 +144,51 @@ test('response-time thresholds are deterministic at 800ms and 2000ms boundaries'
   assert.equal(audit({ responseTimeMs: 2000 }).issues.some((issue) => issue.id === 'perf-moderate-ttfb' || issue.id === 'perf-slow-ttfb'), true);
   assert.equal(audit({ responseTimeMs: 2001 }).issues.find((issue) => issue.id === 'perf-slow-ttfb')?.severity, 'high');
   assert.equal(audit({ responseTimeMs: 799 }).issues.some((issue) => issue.id === 'perf-ttfb-pass'), true);
+});
+
+
+test('key-shaped AWS identifiers are reported as potential credentials, not confirmed critical exposure', () => {
+  const result = runCodeDeterministicAudit({
+    code: 'const key = "AKIA1234567890ABCDEF";',
+    language: 'typescript',
+    filename: 'example.ts',
+  });
+  const issue = result.issues.find((item) => item.id === 'code-aws-key-1');
+  assert.equal(issue?.severity, 'high');
+  assert.match(issue?.description || '', /cannot determine whether it is a real credential/i);
+});
+
+test('HTML injection sinks are treated as potential risks until data flow is reviewed', () => {
+  const result = runCodeDeterministicAudit({
+    code: 'element.innerHTML = content;',
+    language: 'javascript',
+    filename: 'example.js',
+  });
+  const issue = result.issues.find((item) => item.id === 'code-xss-1');
+  assert.equal(issue?.severity, 'medium');
+  assert.match(issue?.description || '', /does not prove that untrusted input reaches the sink/i);
+});
+
+test('SQL string construction is not described as a confirmed injection without data-flow evidence', () => {
+  const result = runCodeDeterministicAudit({
+    code: 'db.query("SELECT * FROM users WHERE id = " + userId);',
+    language: 'javascript',
+    filename: 'example.js',
+  });
+  const issue = result.issues.find((item) => item.id === 'code-sqli-1');
+  assert.equal(issue?.severity, 'medium');
+  assert.match(issue?.description || '', /does not prove that attacker-controlled input reaches the query/i);
+});
+
+test('dynamic evaluation is reported as a context-dependent risk rather than confirmed remote code execution', () => {
+  const result = runCodeDeterministicAudit({
+    code: 'eval("1 + 1");',
+    language: 'javascript',
+    filename: 'example.js',
+  });
+  const issue = result.issues.find((item) => item.id === 'code-eval-1');
+  assert.equal(issue?.severity, 'medium');
+  assert.match(issue?.description || '', /does not establish that untrusted input is evaluated/i);
 });
 
 test('scores are severity-weighted and category pass counts remain distinct from scores', () => {
