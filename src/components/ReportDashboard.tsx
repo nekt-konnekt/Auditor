@@ -256,7 +256,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
           </div>
           <p className="mt-2 text-xs text-slate-500 font-mono">
             {(report.categories.accessibility?.totalChecks ?? 0) > 0
-              ? `${report.categories.accessibility?.passedCount ?? 0} / ${report.categories.accessibility?.totalChecks ?? 0} checks passed · ${Math.max(0, (report.categories.accessibility?.totalChecks ?? 0) - (report.categories.accessibility?.passedCount ?? 0))} issues`
+              ? `${report.categories.accessibility?.totalChecks ?? 0} recorded observations · ${Math.max(0, (report.categories.accessibility?.totalChecks ?? 0) - (report.categories.accessibility?.passedCount ?? 0))} potential findings`
               : 'Not assessed — no checks in this audit mode'}
           </p>
         </div>
