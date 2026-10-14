@@ -726,8 +726,8 @@ export function runCodeDeterministicAudit(input: CodeAuditInput): {
       id: 'code-clean-pass',
       category: 'security',
       severity: 'passed',
-      title: 'No Common Vulnerability Signatures Found',
-      description: 'Static pattern scanning did not detect obvious credentials, SQL concatenation, or dynamic evaluation.',
+      title: 'No Selected Deterministic Pattern Matches',
+      description: 'The selected deterministic pattern checks did not match this supplied snippet. This does not establish that the code is free of vulnerabilities or that untested code paths are safe.',
       remediation: 'Continue adhering to static typing, safe parameter binding, and continuous dependency auditing.',
     });
   }
