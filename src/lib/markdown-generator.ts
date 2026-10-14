@@ -16,6 +16,20 @@ const SEVERITY_BADGES: Record<Severity, string> = {
   passed: '[PASSED]',
 };
 
+function categoryNameForReport(report: AuditReport, category: Category): string {
+  if (report.target.type === 'repository') {
+    if (category === 'security') return 'Repository Security Hygiene';
+    if (category === 'quality') return 'Repository Quality';
+    return `${CATEGORY_NAMES[category]} (website-only; not assessed)`;
+  }
+  if (report.target.type === 'code') {
+    if (category === 'security') return 'Code Security';
+    if (category === 'quality') return 'Code Quality';
+    return `${CATEGORY_NAMES[category]} (not assessed for source snippet)`;
+  }
+  return CATEGORY_NAMES[category];
+}
+
 export function generateAuditMarkdown(report: AuditReport): string {
   const dateFormatted = new Date(report.createdAt).toUTCString();
   const targetLabel = report.target.type === 'url' ? report.target.target : (report.target.filename || 'Code Snippet');
@@ -59,7 +73,7 @@ ${coverageNote}
 `;
 
   Object.entries(report.categories).forEach(([catKey, catScore]) => {
-    const name = CATEGORY_NAMES[catKey as Category] || catKey;
+    const name = categoryNameForReport(report, catKey as Category) || catKey;
     const scoreVal = catScore.totalChecks > 0 ? `${catScore.score} / 100` : 'Not assessed';
     const checksVal = catScore.totalChecks > 0 ? `${catScore.passedCount} / ${catScore.totalChecks}` : '—';
     const status = catScore.totalChecks === 0
@@ -82,7 +96,7 @@ ${coverageNote}
     const list = issuesGroupedByCat[cat];
     if (!list || list.length === 0) return;
 
-    md += `### ${CATEGORY_NAMES[cat]}\n\n`;
+    md += `### ${categoryNameForReport(report, cat)}\n\n`;
 
     list.forEach((issue, idx) => {
       const badge = SEVERITY_BADGES[issue.severity];
