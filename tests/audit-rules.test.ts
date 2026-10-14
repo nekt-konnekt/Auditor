@@ -197,6 +197,18 @@ test('response-time thresholds are deterministic at 800ms and 2000ms boundaries'
 });
 
 
+
+test('clean snippet result explicitly limits itself to selected deterministic patterns', () => {
+  const result = runCodeDeterministicAudit({
+    code: 'const answer = 42;',
+    language: 'typescript',
+    filename: 'example.ts',
+  });
+  const issue = result.issues.find((item) => item.id === 'code-clean-pass');
+  assert.equal(issue?.title, 'No Selected Deterministic Pattern Matches');
+  assert.match(issue?.description || '', /does not establish that the code is free of vulnerabilities/i);
+});
+
 test('key-shaped AWS identifiers are reported as potential credentials, not confirmed critical exposure', () => {
   const result = runCodeDeterministicAudit({
     code: 'const key = "AKIA1234567890ABCDEF";',
