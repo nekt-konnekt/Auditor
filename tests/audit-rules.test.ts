@@ -128,6 +128,19 @@ test('invalid X-Frame-Options values are not counted as clickjacking protection'
   assert.equal(result.issues.find((item) => item.id === 'sec-xfo')?.severity, 'medium');
 });
 
+
+test('a wildcard frame-ancestors directive is not counted as restrictive clickjacking protection', () => {
+  const result = audit({
+    headers: {
+      ...secureHeaders,
+      'x-frame-options': '',
+      'content-security-policy': "default-src 'self'; script-src 'self'; frame-ancestors *",
+    },
+  });
+  assert.equal(result.issues.some((item) => item.id === 'sec-xfo-pass'), false);
+  assert.equal(result.issues.some((item) => item.id === 'sec-xfo'), true);
+});
+
 test('X-Content-Type-Options must equal nosniff rather than merely contain that substring', () => {
   const result = audit({ headers: { ...secureHeaders, 'x-content-type-options': 'not-nosniff' } });
   assert.equal(result.issues.some((item) => item.id === 'sec-xcto-pass'), false);
