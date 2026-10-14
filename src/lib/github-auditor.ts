@@ -163,9 +163,9 @@ export async function auditGitHubRepo(url: string): Promise<AuditReport> {
       category: 'security',
       severity: 'low',
       title: 'No Security Policy File Found in Checked Locations',
-      description: 'Auditor did not find SECURITY.md at the repository root, .github/SECURITY.md, or docs/SECURITY.md. This is a disclosure-process gap, not evidence that a vulnerability exists.'
-      impact: 'Without a clear private disclosure path, reporters may not know how to share security concerns responsibly.'
-      remediation: 'Add a security policy in a supported location, document supported versions, and provide a verified private reporting channel.'
+      description: 'Auditor did not find SECURITY.md at the repository root, .github/SECURITY.md, or docs/SECURITY.md. This is a disclosure-process gap, not evidence that a vulnerability exists.',
+      impact: 'Without a clear private disclosure path, reporters may not know how to share security concerns responsibly.',
+      remediation: 'Add a security policy in a supported location, document supported versions, and provide a verified private reporting channel.',
       references: [
         { title: 'GitHub: Adding a security policy', url: 'https://docs.github.com/en/code-security/getting-started/adding-a-security-policy-to-your-repository' },
       ],
@@ -179,7 +179,7 @@ export async function auditGitHubRepo(url: string): Promise<AuditReport> {
       category: 'security',
       severity: 'passed',
       title: 'Security Policy (SECURITY.md) Declared',
-      description: 'A formal vulnerability disclosure policy is present in the repository root.',
+      description: 'A SECURITY.md file was found in one of the checked locations.'
       evidence: securityMd.substring(0, 100),
       remediation: 'Periodically review supported versions and contact addresses.',
     });
