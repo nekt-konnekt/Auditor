@@ -1,6 +1,5 @@
 import { AuditIssue, AuditReport, Category, CategoryScore } from '../types/audit.ts';
 import { calculateAuditScores } from './audit-rules.ts';
-import { analyzeWithGemini } from './gemini-auditor.ts';
 
 export interface GitHubRepoDetails {
   owner: string;
@@ -98,7 +97,6 @@ export async function auditGitHubRepo(url: string): Promise<AuditReport> {
   let gitignore: string | null = null;
   let packageJson: string | null = null;
   let readme: string | null = null;
-  let workflowsDetected = false;
 
   const fetchRaw = async (filePath: string): Promise<string | null> => {
     let res: Response;
@@ -127,6 +125,22 @@ export async function auditGitHubRepo(url: string): Promise<AuditReport> {
   gitignore = gitignoreRes;
   packageJson = pkgRes;
   readme = readmeRes;
+
+  // GitHub may not classify custom license files. Probe common root filenames
+  // before claiming that no license file exists.
+  let licenseFilePath: string | null = null;
+  let licenseFileContent: string | null = null;
+  if (license === 'Unlicensed' || license === 'None detected') {
+    const licenseCandidates = ['LICENSE', 'LICENSE.md', 'LICENSE.txt', 'COPYING', 'COPYING.md'];
+    const candidateResults = await Promise.all(
+      licenseCandidates.map(async (filePath) => ({ filePath, content: await fetchRaw(filePath) })),
+    );
+    const detected = candidateResults.find((candidate) => candidate.content !== null);
+    if (detected) {
+      licenseFilePath = detected.filePath;
+      licenseFileContent = detected.content;
+    }
+  }
 
   // 3. Deterministic Security & Repository Hygiene Checks
 
@@ -164,7 +178,7 @@ export async function auditGitHubRepo(url: string): Promise<AuditReport> {
   if (gitignore) {
     const hasEnvIgnored = /^\s*\.env/m.test(gitignore);
     const hasPemIgnored = /\.pem|\.key/m.test(gitignore);
-    metrics['Secrets in .gitignore'] = hasEnvIgnored ? 'Protected (.env)' : 'Vulnerable';
+    metrics['Secrets in .gitignore'] = hasEnvIgnored ? 'Excludes .env files' : 'No .env exclusion detected';
 
     if (!hasEnvIgnored) {
       issues.push({
@@ -218,11 +232,11 @@ export async function auditGitHubRepo(url: string): Promise<AuditReport> {
         issues.push({
           id: 'gh-pkg-wildcard',
           category: 'security',
-          severity: 'high',
-          title: `Unpinned / Wildcard Dependency Versions (${wildcardDeps.length})`,
-          description: `Dependencies specified with '*' or 'latest': ${wildcardDeps.map(([d]) => d).join(', ')}.`,
-          impact: 'Exposes production builds to unpredictable upstream supply-chain poisoning and breaking API updates.',
-          remediation: 'Pin dependencies to explicit semantic versions or strict ranges (e.g. `^1.2.3` or exact versions with lockfiles).',
+          severity: 'medium',
+          title: `Wildcard Dependency Version Ranges (${wildcardDeps.length})`,
+          description: `Dependencies using a wildcard or the `latest` tag were found: ${wildcardDeps.map(([d]) => d).join(', ')}.`,
+          impact: 'These ranges can make dependency resolution less reproducible. This observation does not by itself establish that a package is vulnerable or that a supply-chain compromise occurred.',
+          remediation: 'Prefer bounded version ranges and commit/maintain the appropriate lockfile. Use exact versions where your reproducibility policy requires them; verify actual package vulnerabilities with a dependency advisory scanner.',
         });
       } else {
         issues.push({
@@ -240,26 +254,41 @@ export async function auditGitHubRepo(url: string): Promise<AuditReport> {
   }
 
   // Check: Open Source Licensing
-  metrics['Open Source License'] = license;
+  metrics['Open Source License'] = licenseFilePath
+    ? `License file present but not classified by GitHub (${licenseFilePath})`
+    : license;
   if (!license || license === 'Unlicensed' || license === 'None detected') {
-    issues.push({
-      id: 'gh-license-missing',
-      category: 'quality',
-      severity: 'medium',
-      title: 'Missing Open Source Software License',
-      description: 'The repository does not declare a recognized open-source or commercial license (e.g. MIT, Apache 2.0, BSD).',
-      impact: 'Under copyright law, the code remains "all rights reserved," making it legally ambiguous or prohibited for other developers to consume or contribute.',
-      remediation: 'Add a `LICENSE` file (such as MIT or Apache-2.0) defining permissible reuse and distribution terms.',
-      references: [{ title: 'Choose an Open Source License', url: 'https://choosealicense.com/' }],
-    });
+    if (licenseFilePath) {
+      issues.push({
+        id: 'gh-license-unclassified',
+        category: 'quality',
+        severity: 'low',
+        title: 'License File Present but Not Classified',
+        description: `A root-level ${licenseFilePath} file was found, but GitHub did not identify a recognized license. Auditor has not determined whether the file grants reuse rights.`,
+        impact: 'The license terms may require human review; file presence alone does not establish that the project is permissively licensed.',
+        evidence: (licenseFileContent || '').substring(0, 180),
+        remediation: 'Review the license text and confirm it clearly defines the rights and restrictions intended for this repository.',
+      });
+    } else {
+      issues.push({
+        id: 'gh-license-missing',
+        category: 'quality',
+        severity: 'medium',
+        title: 'No Common Root-Level License File Detected',
+        description: 'GitHub did not report a recognized license, and Auditor did not find a license file at the common root-level paths it checked. Other locations or custom arrangements were not inspected.',
+        impact: 'Without applicable license terms, others may not have permission to reuse or redistribute the code. This check is limited to repository metadata and common root-level filenames.',
+        remediation: 'Confirm the intended licensing policy and add an appropriate license file if the repository is meant to be reused or distributed.',
+        references: [{ title: 'Choose an Open Source License', url: 'https://choosealicense.com/' }],
+      });
+    }
   } else {
     issues.push({
       id: 'gh-license-pass',
       category: 'quality',
       severity: 'passed',
-      title: `Valid Software License Declared (${license})`,
-      description: `The project is published with an recognized ${license} license.`,
-      remediation: 'Ensure dependencies remain compatible with this license.',
+      title: `GitHub Reports a Recognized License (${license})`,
+      description: `GitHub's repository metadata identifies the license as ${license}; this is a metadata observation, not a full legal review.`,
+      remediation: 'Confirm that the declared license matches your intended distribution and dependency obligations.',
     });
   }
 
@@ -268,7 +297,7 @@ export async function auditGitHubRepo(url: string): Promise<AuditReport> {
   if (!readme || readme.length < 150) {
     issues.push({
       id: 'gh-readme-sparse',
-      category: 'seo',
+      category: 'quality',
       severity: 'low',
       title: 'Sparse or Missing README Documentation',
       description: 'The repository README provides little to no setup instructions, architecture overview, or quickstart guide.',
@@ -286,25 +315,10 @@ export async function auditGitHubRepo(url: string): Promise<AuditReport> {
     });
   }
 
-  // 4. Gemini Deep Analysis on Repository Context
-  const contextSnippet = `
-GitHub Repository: ${fullName}
-Description: ${description}
-License: ${license}
-Default Branch: ${defaultBranch}
-Stars: ${stars}, Open Issues: ${openIssuesCount}
-Has SECURITY.md: ${Boolean(securityMd)}
-Has .gitignore: ${Boolean(gitignore)}
-package.json summary: ${packageJson ? packageJson.substring(0, 1500) : 'None'}
-README excerpt: ${readme ? readme.substring(0, 1500) : 'None'}
-`;
-
-  const aiResult = await analyzeWithGemini('code', fullName, contextSnippet, {
-    filename: `${fullName} (GitHub Repo)`,
-    language: 'markdown',
-  });
-
-  const allIssues = [...issues, ...aiResult.additionalIssues];
+  // This mode inspects repository metadata and selected root-level files only.
+  // Do not send this metadata summary to a source-code auditor or describe it as
+  // a source-level security review.
+  const allIssues = issues;
   const { overallScore, categories } = calculateAuditScores(allIssues);
 
   const responseTimeMs = Date.now() - startTime;
@@ -323,9 +337,7 @@ README excerpt: ${readme ? readme.substring(0, 1500) : 'None'}
     },
     overallScore,
     categories,
-    summary:
-      aiResult.summary ||
-      `Security and architecture audit completed for GitHub repository ${fullName}. Analyzed repository configuration, security policies, dependency governance, and secret leakage risks.`,
+    summary: `Repository hygiene review of ${fullName}. Auditor inspected public repository metadata and selected root-level files on the default branch (including SECURITY.md, .gitignore, package.json, README.md, and common license filenames). It did not scan all source files, repository history, secrets across the full tree, dependency advisories, deployed runtime behavior, or private content. Treat findings as limited observations, not a complete security audit.`,
     issues: allIssues,
     metrics,
   };
