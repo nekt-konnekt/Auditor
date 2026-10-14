@@ -125,7 +125,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
             {report.target.responseTimeMs && (
               <>
                 <span aria-hidden="true">·</span>
-                <span className="tabular-nums">{report.target.responseTimeMs} ms</span>
+                <span className="tabular-nums">{report.target.responseTimeMs} ms fetch</span>
               </>
             )}
             {report.target.statusCode && (
