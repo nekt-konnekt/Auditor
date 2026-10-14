@@ -133,7 +133,7 @@ test('a wildcard frame-ancestors directive is not counted as restrictive clickja
   const result = audit({
     headers: {
       ...secureHeaders,
-      'x-frame-options': '',
+      'x-frame-options': 'DENY',
       'content-security-policy': "default-src 'self'; script-src 'self'; frame-ancestors *",
     },
   });
