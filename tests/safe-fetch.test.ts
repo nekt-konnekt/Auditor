@@ -137,6 +137,31 @@ test('decoded response bodies remain subject to the 2 MB size limit', async () =
   }
 });
 
+
+test('compressed payloads that expand beyond 2 MB are rejected', async () => {
+  const compressed = gzipSync(Buffer.alloc(2 * 1024 * 1024 + 1, 0x61));
+  const { server, port } = await startServer((_request, response) => {
+    response.writeHead(200, {
+      'content-type': 'text/html',
+      'content-encoding': 'gzip',
+      'content-length': String(compressed.byteLength),
+    });
+    response.end(compressed);
+  });
+  try {
+    await assert.rejects(
+      requestPinnedPublicResponse({
+        url: new URL('http://example.com:' + port + '/compressed-large'),
+        address: '127.0.0.1',
+        family: 4,
+      }, 2000),
+      /larger than the 2 MB audit limit/,
+    );
+  } finally {
+    await stopServer(server);
+  }
+});
+
 test('request timeout covers a server that never completes the response', async () => {
   const { server, port } = await startServer(() => {
     // Intentionally keep the socket open until the client times out.
