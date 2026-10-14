@@ -95,9 +95,9 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
   };
 
   const targetLabel =
-    report.target.type === 'url'
+    report.target.type === 'url' || report.target.type === 'repository'
       ? report.target.target
-      : report.target.filename || (report.target.type === 'repository' ? 'GitHub Repository' : 'Source Code File');
+      : report.target.filename || 'Source Code File';
   const isHttpErrorResponse = report.target.type === 'url'
     && typeof report.target.statusCode === 'number'
     && report.target.statusCode >= 400;
