@@ -81,6 +81,7 @@ test('repository audit distinguishes an unclassified license file from no licens
     const markdown = generateAuditMarkdown(report);
     assert.match(markdown, /Target Type\*\*: REPOSITORY/);
     assert.match(markdown, /Repository Hygiene Diagnostic Score/);
+    assert.match(markdown, /Not assessed/);
     assert.match(markdown, /did not scan all source files/i);
     assert.doesNotMatch(markdown, /\{#if report\.target\.type/);
     assert.equal(report.issues.some((item) => item.id === 'gh-license-missing'), false);
