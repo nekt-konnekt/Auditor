@@ -1,7 +1,7 @@
 import { AuditReport, Category, Severity } from '../types/audit.ts';
 
 const CATEGORY_NAMES: Record<Category, string> = {
-  security: 'Security & Headers',
+  security: 'Transport & Security Headers',
   seo: 'Search Engine Optimization (SEO)',
   accessibility: 'Accessibility & Semantics',
   performance: 'Performance & Architecture',
@@ -37,7 +37,7 @@ export function generateAuditMarkdown(report: AuditReport): string {
   const isHttpErrorResponse = report.target.type === 'url'
     && typeof report.target.statusCode === 'number'
     && report.target.statusCode >= 400;
-  const scoreLabel = isHttpErrorResponse ? 'Diagnostic Score (Error Response)' : report.target.type === 'repository' ? 'Repository Hygiene Diagnostic Score' : report.target.type === 'code' ? 'Source Snippet Diagnostic Score' : 'Severity-weighted Diagnostic Score';
+  const scoreLabel = isHttpErrorResponse ? 'Diagnostic Score (Error Response)' : report.target.type === 'repository' ? 'Repository Hygiene Diagnostic Score' : report.target.type === 'code' ? 'Source Snippet Diagnostic Score' : 'Website Snapshot Diagnostic Score';
   const coverageNote = report.target.type === 'url'
     ? '> Not performed: browser rendering tests, Core Web Vitals or real-user performance measurement, authenticated-flow checks, and audits of other routes. This report evaluates listed rules against the submitted URL response; it is not a guarantee of overall security or accessibility.'
     : report.target.type === 'repository'
