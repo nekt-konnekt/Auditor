@@ -28,7 +28,7 @@ export interface CategoryScore {
 }
 
 export interface AuditTargetMeta {
-  type: 'url' | 'code';
+  type: 'url' | 'code' | 'repository';
   target: string;
   language?: string;
   filename?: string;
