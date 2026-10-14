@@ -69,11 +69,11 @@ test('missing HSTS remains a finding for HTTPS responses', () => {
   assert.equal(result.issues.find((item) => item.id === 'sec-hsts')?.severity, 'medium');
 });
 
-test('missing title and viewport are important SEO issues but not automatically critical', () => {
+test('missing title and viewport are metadata issues, not automatically high-severity failures', () => {
   const noTitle = audit({ html: cleanHtml.replace(/<title>.*?<\/title>/, '') });
   const noViewport = audit({ html: cleanHtml.replace(/<meta name="viewport"[^>]*>/, '') });
-  assert.equal(noTitle.issues.find((item) => item.id === 'seo-title-missing')?.severity, 'high');
-  assert.equal(noViewport.issues.find((item) => item.id === 'seo-viewport')?.severity, 'high');
+  assert.equal(noTitle.issues.find((item) => item.id === 'seo-title-missing')?.severity, 'medium');
+  assert.equal(noViewport.issues.find((item) => item.id === 'seo-viewport')?.severity, 'medium');
 });
 
 test('HTTP 301 is recorded as a redirect-class response and is not marked as a server error', () => {
@@ -97,15 +97,52 @@ test('HTTP 503 is explicitly flagged as a critical server error response', () =>
   assert.equal(result.metrics['HTTP Status Class'], '5xx');
 });
 
-test('missing CSP remains a high-severity finding', () => {
+test('missing CSP is reported as a defense-in-depth gap, not a confirmed vulnerability', () => {
   const result = audit({ headers: { ...secureHeaders, 'content-security-policy': '' } });
-  assert.equal(result.issues.find((issue) => issue.id === 'sec-csp')?.severity, 'high');
+  assert.equal(result.issues.find((issue) => issue.id === 'sec-csp')?.severity, 'medium');
 });
 
 test('a present but permissive CSP is not automatically counted as passed', () => {
   const result = audit({ headers: { ...secureHeaders, 'content-security-policy': "default-src *; script-src 'unsafe-inline' *" } });
   assert.equal(result.issues.some((issue) => issue.id === 'sec-csp-pass'), false);
   assert.equal(result.issues.find((issue) => issue.id === 'sec-csp-weak')?.severity, 'medium');
+});
+
+
+test('HSTS with max-age=0 is not counted as effective protection', () => {
+  const result = audit({ headers: { ...secureHeaders, 'strict-transport-security': 'max-age=0' } });
+  assert.equal(result.metrics['HSTS Present'], false);
+  assert.equal(result.issues.find((item) => item.id === 'sec-hsts')?.severity, 'medium');
+  assert.match(result.issues.find((item) => item.id === 'sec-hsts')?.title || '', /ineffective/i);
+});
+
+test('invalid X-Frame-Options values are not counted as clickjacking protection', () => {
+  const result = audit({
+    headers: {
+      ...secureHeaders,
+      'x-frame-options': 'ALLOW-FROM https://example.com',
+      'content-security-policy': "default-src 'self'; script-src 'self'",
+    },
+  });
+  assert.equal(result.issues.some((item) => item.id === 'sec-xfo-pass'), false);
+  assert.equal(result.issues.find((item) => item.id === 'sec-xfo')?.severity, 'medium');
+});
+
+test('X-Content-Type-Options must equal nosniff rather than merely contain that substring', () => {
+  const result = audit({ headers: { ...secureHeaders, 'x-content-type-options': 'not-nosniff' } });
+  assert.equal(result.issues.some((item) => item.id === 'sec-xcto-pass'), false);
+  assert.equal(result.issues.find((item) => item.id === 'sec-xcto')?.severity, 'low');
+});
+
+test('unsafe-inline in style-src alone does not trigger a script-policy weakness finding', () => {
+  const result = audit({
+    headers: {
+      ...secureHeaders,
+      'content-security-policy': "default-src 'self'; script-src 'self'; style-src 'unsafe-inline'; object-src 'none'; frame-ancestors 'none'",
+    },
+  });
+  assert.equal(result.issues.some((item) => item.id === 'sec-csp-weak'), false);
+  assert.equal(result.issues.some((item) => item.id === 'sec-csp-pass'), true);
 });
 
 test('long meta descriptions are flagged while normal descriptions pass', () => {
