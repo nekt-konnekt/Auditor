@@ -179,7 +179,7 @@ export async function auditGitHubRepo(url: string): Promise<AuditReport> {
       category: 'security',
       severity: 'passed',
       title: 'Security Policy (SECURITY.md) Declared',
-      description: 'A SECURITY.md file was found in one of the checked locations.'
+      description: 'A SECURITY.md file was found in one of the checked locations.',
       evidence: securityMd.substring(0, 100),
       remediation: 'Periodically review supported versions and contact addresses.',
     });
@@ -228,8 +228,8 @@ export async function auditGitHubRepo(url: string): Promise<AuditReport> {
       category: 'quality',
       severity: 'low',
       title: 'Missing .gitignore File',
-      description: 'No root-level .gitignore was found. This does not establish that unwanted files are committed or that nested ignore files are absent.'
-      impact: 'Without suitable ignore rules, local or generated files may be committed accidentally. No such committed files were confirmed by this check.'
+      description: 'No root-level .gitignore was found. This does not establish that unwanted files are committed or that nested ignore files are absent.',
+      impact: 'Without suitable ignore rules, local or generated files may be committed accidentally. No such committed files were confirmed by this check.',
       remediation: 'Add a standard `.gitignore` suited to your project tech stack.',
     });
   }
