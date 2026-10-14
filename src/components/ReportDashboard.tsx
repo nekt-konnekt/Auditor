@@ -220,7 +220,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
           </div>
           <p className="mt-2 text-xs text-slate-500 font-mono">
             {(report.categories.security?.totalChecks ?? 0) > 0
-              ? `${report.categories.security?.passedCount ?? 0} / ${report.categories.security?.totalChecks ?? 0} checks passed · ${Math.max(0, (report.categories.security?.totalChecks ?? 0) - (report.categories.security?.passedCount ?? 0))} issues`
+              ? `${report.categories.security?.totalChecks ?? 0} recorded observations · ${Math.max(0, (report.categories.security?.totalChecks ?? 0) - (report.categories.security?.passedCount ?? 0))} potential findings`
               : 'Not assessed — no checks in this audit mode'}
           </p>
         </div>
@@ -238,7 +238,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
           </div>
           <p className="mt-2 text-xs text-slate-500 font-mono">
             {(report.categories.seo?.totalChecks ?? 0) > 0
-              ? `${report.categories.seo?.passedCount ?? 0} / ${report.categories.seo?.totalChecks ?? 0} checks passed · ${Math.max(0, (report.categories.seo?.totalChecks ?? 0) - (report.categories.seo?.passedCount ?? 0))} issues`
+              ? `${report.categories.seo?.totalChecks ?? 0} recorded observations · ${Math.max(0, (report.categories.seo?.totalChecks ?? 0) - (report.categories.seo?.passedCount ?? 0))} potential findings`
               : 'Not assessed — no checks in this audit mode'}
           </p>
         </div>
@@ -274,7 +274,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
           </div>
           <p className="mt-2 text-xs text-slate-500 font-mono">
             {(primaryCategory?.totalChecks ?? 0) > 0
-              ? `${primaryCategory?.passedCount ?? 0} / ${primaryCategory?.totalChecks ?? 0} checks passed · ${Math.max(0, (primaryCategory?.totalChecks ?? 0) - (primaryCategory?.passedCount ?? 0))} issues`
+              ? `${primaryCategory?.totalChecks ?? 0} recorded observations · ${Math.max(0, (primaryCategory?.totalChecks ?? 0) - (primaryCategory?.passedCount ?? 0))} potential findings`
               : 'Not assessed — no checks in this audit mode'}
           </p>
         </div>
