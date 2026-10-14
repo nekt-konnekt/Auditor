@@ -132,11 +132,15 @@ export function runUrlDeterministicAudit(input: UrlAuditInput): {
   const xfo = headers['x-frame-options'];
   const validXfo = Boolean(xfo && /^(DENY|SAMEORIGIN)$/i.test(xfo.trim()));
   const frameAncestorsDirective = csp?.split(';').map((part) => part.trim())
-    .find((part) => {
-      const match = part.match(/^frame-ancestors\s+(.+)$/i);
-      return Boolean(match && !match[1].trim().split(/\s+/).includes('*'));
-    });
-  const hasFrameProtection = validXfo || Boolean(frameAncestorsDirective);
+    .find((part) => /^frame-ancestors(?:\s|$)/i.test(part));
+  const frameAncestorsSources = frameAncestorsDirective?.replace(/^frame-ancestors\s*/i, '').trim() || '';
+  const restrictiveFrameAncestors = frameAncestorsSources.length > 0
+    && !frameAncestorsSources.split(/\s+/).includes('*');
+  // A present CSP frame-ancestors directive takes precedence over X-Frame-Options
+  // in modern browsers, so a wildcard/empty directive must not be masked by XFO.
+  const hasFrameProtection = frameAncestorsDirective
+    ? restrictiveFrameAncestors
+    : validXfo;
   metrics['X-Frame-Options'] = xfo || 'Not set';
   if (!hasFrameProtection) {
     issues.push({
