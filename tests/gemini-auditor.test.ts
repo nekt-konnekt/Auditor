@@ -24,6 +24,16 @@ test('AI findings with exact observed evidence are retained with evidence attach
   ], 'code', 'return <div dangerouslySetInnerHTML={{ __html: value }} />;', {});
   assert.equal(result.length, 1);
   assert.equal(result[0].evidence, 'dangerouslySetInnerHTML');
+  assert.match(result[0].title, /^Potential \(AI-assisted\):/);
+  assert.match(result[0].description, /not independently validated/i);
+});
+
+
+test('AI-generated critical severity is capped until independently validated', () => {
+  const result = filterEvidenceBackedIssues([
+    { ...candidate, severity: 'critical' },
+  ], 'code', 'dangerouslySetInnerHTML', {});
+  assert.equal(result[0].severity, 'high');
 });
 
 test('AI-generated passed findings are discarded even when evidence is present', () => {
