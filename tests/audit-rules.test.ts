@@ -46,6 +46,36 @@ test('clean HTTP 200 page passes the expected deterministic baseline checks', ()
   assert.equal(result.issues.some((issue) => issue.id === 'perf-ttfb-pass'), true);
 });
 
+
+test('HTTP transport finding is high severity and does not assume sensitive data is handled', () => {
+  const result = audit({ url: 'http://example.com/' });
+  const issue = result.issues.find((item) => item.id === 'sec-https');
+  assert.equal(issue?.severity, 'high');
+  assert.match(issue?.description || '', /does not establish what data the site handles/i);
+});
+
+test('HSTS is not reported as missing on HTTP because browsers ignore HSTS received over HTTP', () => {
+  const result = audit({ url: 'http://example.com/', headers: { ...secureHeaders, 'strict-transport-security': '' } });
+  assert.equal(result.metrics['HSTS Present'], 'Not applicable (HTTP)');
+  assert.equal(result.issues.some((item) => item.id === 'sec-hsts'), false);
+  assert.equal(result.issues.some((item) => item.id === 'sec-hsts-pass'), false);
+});
+
+test('missing HSTS remains a finding for HTTPS responses', () => {
+  const headers = { ...secureHeaders };
+  delete headers['strict-transport-security'];
+  const result = audit({ headers });
+  assert.equal(result.metrics['HSTS Present'], false);
+  assert.equal(result.issues.find((item) => item.id === 'sec-hsts')?.severity, 'medium');
+});
+
+test('missing title and viewport are important SEO issues but not automatically critical', () => {
+  const noTitle = audit({ html: cleanHtml.replace(/<title>.*?<\/title>/, '') });
+  const noViewport = audit({ html: cleanHtml.replace(/<meta name="viewport"[^>]*>/, '') });
+  assert.equal(noTitle.issues.find((item) => item.id === 'seo-title-missing')?.severity, 'high');
+  assert.equal(noViewport.issues.find((item) => item.id === 'seo-viewport')?.severity, 'high');
+});
+
 test('HTTP 301 is recorded as a redirect-class response and is not marked as a server error', () => {
   const result = audit({ statusCode: 301 });
   assert.equal(result.metrics['HTTP Status Class'], '3xx');
