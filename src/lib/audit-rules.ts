@@ -446,10 +446,10 @@ export function runUrlDeterministicAudit(input: UrlAuditInput): {
   const htmlSizeKb = Math.round((new TextEncoder().encode(input.html).byteLength / 1024) * 10) / 10;
   const scriptTags = $('script[src]').length;
   const styleTags = $('link[rel="stylesheet"]').length;
-  metrics['HTML Size'] = `${htmlSizeKb} KB`;
+  metrics['Decoded HTML Size'] = `${htmlSizeKb} KB`;
   metrics['External Scripts'] = scriptTags;
   metrics['External Stylesheets'] = styleTags;
-  metrics['Response Time'] = `${input.responseTimeMs} ms`;
+  metrics['HTML Fetch Duration'] = `${input.responseTimeMs} ms`;
   metrics['HTTP Status'] = input.statusCode;
   metrics['HTTP Status Class'] = `${Math.floor(input.statusCode / 100)}xx`;
 
@@ -458,9 +458,9 @@ export function runUrlDeterministicAudit(input: UrlAuditInput): {
       id: 'perf-slow-ttfb',
       category: 'performance',
       severity: 'high',
-      title: `Slow Server Initial Response Time (${input.responseTimeMs}ms)`,
-      description: 'The time to first byte and initial document fetch exceeded 2.0 seconds.',
-      impact: 'Poor user experience, high bounce rates, and lower Core Web Vitals (LCP) scores.',
+      title: `Slow Initial HTML Fetch Duration (${input.responseTimeMs}ms)`,
+      description: 'The initial HTML request and response-body read took more than 2.0 seconds. This is not a pure time-to-first-byte or browser-rendering measurement.',
+      impact: 'A slow initial HTML fetch can delay the start of rendering and may indicate origin, network, or payload-size overhead.',
       remediation: 'Enable edge caching (CDN), server-side caching, or optimize database queries and server compute.',
     });
   } else if (input.responseTimeMs > 800) {
@@ -468,8 +468,8 @@ export function runUrlDeterministicAudit(input: UrlAuditInput): {
       id: 'perf-moderate-ttfb',
       category: 'performance',
       severity: 'medium',
-      title: `Sub-optimal Server Response Time (${input.responseTimeMs}ms)`,
-      description: 'Response time is between 800ms and 2000ms.',
+      title: `Sub-optimal Initial HTML Fetch Duration (${input.responseTimeMs}ms)`,
+      description: 'Initial HTML fetch duration is between 800ms and 2000ms, including reading the response body; it is not a pure time-to-first-byte measurement.',
       remediation: 'Implement HTTP compression (gzip/brotli) and CDN caching.',
     });
   } else {
@@ -477,8 +477,8 @@ export function runUrlDeterministicAudit(input: UrlAuditInput): {
       id: 'perf-ttfb-pass',
       category: 'performance',
       severity: 'passed',
-      title: `Fast Initial Server Response (${input.responseTimeMs}ms)`,
-      description: 'Server responded quickly within acceptable latency thresholds (<800ms).',
+      title: `Fast Initial HTML Fetch (${input.responseTimeMs}ms)`,
+      description: 'The initial HTML response and body were fetched within the 800ms threshold. This does not measure browser rendering or real-user performance.',
       remediation: 'Maintain CDN and caching layers.',
     });
   }
