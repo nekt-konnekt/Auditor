@@ -43,7 +43,7 @@ ${isHttpErrorResponse ? `\n> **Target returned HTTP ${report.target.statusCode}.
 
 ${report.summary}
 
-> Coverage limitation: this report evaluates the listed rules against the fetched response. It does not execute browser-based tests, validate every route, or guarantee overall security, accessibility, or real-user performance.
+> Not performed: browser rendering tests, Core Web Vitals or real-user performance measurement, authenticated-flow checks, and audits of other routes. This report evaluates the listed rules against the submitted URL's fetched response; it is not a guarantee of overall security or accessibility.
 
 ---
 
