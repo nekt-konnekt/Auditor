@@ -5,7 +5,7 @@ import {
   runCodeDeterministicAudit,
   runUrlDeterministicAudit,
 } from './audit-rules.ts';
-import { analyzeWithGemini } from './gemini-auditor.ts';
+import { analyzeWithAI } from './ai-auditor.ts';
 import { auditGitHubRepo, parseGitHubUrl } from './github-auditor.ts';
 import { fetchPublicPage, validatePublicHttpUrl } from './safe-fetch.ts';
 import { inspectReadinessPreflight } from './readiness-preflight.ts';
@@ -100,7 +100,7 @@ export async function executeAudit(payload: AuditRequestPayload): Promise<AuditR
     // Error pages are useful to inspect, but AI analysis can mistake their markup
     // for the intended page. Keep these reports deterministic and label their limits.
     const aiResult = response.ok
-      ? await analyzeWithGemini('url', url.toString(), redactSensitiveText(html), {
+      ? await analyzeWithAI('url', url.toString(), redactSensitiveText(html), {
           statusCode: response.status,
           responseTimeMs,
           headers: headersMap,
@@ -160,7 +160,7 @@ export async function executeAudit(payload: AuditRequestPayload): Promise<AuditR
   if (code.length > 200_000) throw new Error('Source code is limited to 200,000 characters per audit.');
 
   const { issues: deterministicIssues, metrics } = runCodeDeterministicAudit({ code, language, filename });
-  const aiResult = await analyzeWithGemini('code', filename, redactSensitiveText(code), { language, filename });
+  const aiResult = await analyzeWithAI('code', filename, redactSensitiveText(code), { language, filename });
   const allIssues = [...deterministicIssues, ...aiResult.additionalIssues];
   const { overallScore, categories, verdict } = calculateAuditScores(allIssues);
   const report: AuditReport = {
