@@ -53,7 +53,7 @@ async function readCertificate(hostname: string, port: number): Promise<{
       finish({
         valid: socket.authorized && dateValid,
         expiresAt: new Date(validTo).toISOString(),
-        issuer: certificate.issuer?.O || certificate.issuer?.CN || 'Unknown issuer',
+        issuer: (Array.isArray(certificate.issuer?.O) ? certificate.issuer?.O[0] : certificate.issuer?.O) || (Array.isArray(certificate.issuer?.CN) ? certificate.issuer?.CN[0] : certificate.issuer?.CN) || 'Unknown issuer',
         daysRemaining,
       });
       socket.end();
