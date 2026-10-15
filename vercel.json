@@ -3,10 +3,7 @@
   "installCommand": "bun install --force",
   "functions": {
     "api/index.ts": {
-      "includeFiles": [
-        "server.ts",
-        "src/**/*.ts"
-      ]
+      "includeFiles": "{server.ts,src/**/*.ts}"
     }
   },
   "rewrites": [
