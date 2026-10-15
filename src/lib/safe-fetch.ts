@@ -270,7 +270,7 @@ const RESOURCE_MAX_REDIRECTS = 3;
 
 /** Fetch a small public same-origin resource for passive exposure checks. */
 export async function fetchPublicResource(input: string, expectedOrigin: string, timeoutMs = 6_000, maxRedirects = RESOURCE_MAX_REDIRECTS): Promise<{ url: URL; status: number; contentType: string; body: string } | null> {
-  let validated: { url: URL; addresses: PublicAddress[] };
+  let validated: { url: URL; addresses: ValidatedPublicAddress[] };
   try {
     validated = await validatePublicHttpUrlWithAddresses(input);
   } catch {
