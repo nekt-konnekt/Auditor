@@ -12,13 +12,21 @@ import { AuditHistoryModal } from './components/AuditHistoryModal.tsx';
 import { AuditReport, AuditRequestPayload } from './types/audit.ts';
 
 const STORAGE_KEY = 'auditor_history_reports_v1';
+type LeadStatus = 'Not contacted' | 'Contacted' | 'Replied' | 'Interested in monitoring' | 'Not interested';
+interface LeadRecord { auditId: string; status: LeadStatus; ownerContact: string; sourceNote: string; contactChannel: string; notes: string; updatedAt: string; createdAt: string; targetValue: string; targetType: 'url' | 'code'; verdict: string; overallScore: number; hasExposureFinding: boolean; report: AuditReport; }
 
 export default function App() {
-  const [currentView, setCurrentView] = useState<'form' | 'report' | 'batch'>('form');
+  const [currentView, setCurrentView] = useState<'form' | 'report' | 'batch' | 'leads'>('form');
   const [batchTargets, setBatchTargets] = useState('');
   const [batchLoading, setBatchLoading] = useState(false);
   const [batchError, setBatchError] = useState<string | null>(null);
   const [batchResults, setBatchResults] = useState<Array<{ index: number; target: string; report?: AuditReport; error?: string }>>([]);
+  const [leads, setLeads] = useState<LeadRecord[]>([]);
+  const [leadFilter, setLeadFilter] = useState('all');
+  const [leadLoading, setLeadLoading] = useState(false);
+  const [leadError, setLeadError] = useState<string | null>(null);
+  const [savingLeadId, setSavingLeadId] = useState<string | null>(null);
+  const [metrics, setMetrics] = useState<{ totalAudits: number; verdicts: Record<string, number>; messagesSent: number; replies: number; interested: number } | null>(null);
   const [activeReport, setActiveReport] = useState<AuditReport | null>(null);
   const [historyReports, setHistoryReports] = useState<AuditReport[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -108,6 +116,48 @@ export default function App() {
     }
   };
 
+  const handleOpenLeads = async () => {
+    setCurrentView('leads');
+    setActiveReport(null);
+    setLeadLoading(true);
+    setLeadError(null);
+    try {
+      const [leadResponse, metricsResponse] = await Promise.all([fetch('/api/leads'), fetch('/api/metrics')]);
+      const leadData = await leadResponse.json().catch(() => ({}));
+      const metricData = await metricsResponse.json().catch(() => ({}));
+      if (!leadResponse.ok) throw new Error(leadData.error || 'Unable to load lead tracker.');
+      setLeads(Array.isArray(leadData.leads) ? leadData.leads : []);
+      if (metricsResponse.ok) setMetrics(metricData);
+    } catch (error) {
+      setLeadError(error instanceof Error ? error.message : 'Unable to load lead tracker.');
+    } finally {
+      setLeadLoading(false);
+    }
+  };
+
+  const updateLeadField = (auditId: string, field: 'status' | 'ownerContact' | 'sourceNote' | 'contactChannel' | 'notes', value: string) => {
+    setLeads((current) => current.map((lead) => lead.auditId === auditId ? { ...lead, [field]: value } as LeadRecord : lead));
+  };
+
+  const handleSaveLead = async (lead: LeadRecord) => {
+    setSavingLeadId(lead.auditId);
+    setLeadError(null);
+    try {
+      const response = await fetch(`/api/leads/${encodeURIComponent(lead.auditId)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: lead.status, ownerContact: lead.ownerContact, sourceNote: lead.sourceNote, contactChannel: lead.contactChannel, notes: lead.notes }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Unable to save lead.');
+      setLeads((current) => current.map((item) => item.auditId === lead.auditId ? { ...item, updatedAt: new Date().toISOString() } : item));
+    } catch (error) {
+      setLeadError(error instanceof Error ? error.message : 'Unable to save lead.');
+    } finally {
+      setSavingLeadId(null);
+    }
+  };
+
   const handleRunBatch = async () => {
     const targets = [...new Set(batchTargets.split(/\r?\n/).map((value) => value.trim()).filter(Boolean))];
     if (!targets.length) {
@@ -184,13 +234,35 @@ export default function App() {
         onNewAudit={handleNewAudit}
         onOpenHistory={() => setIsHistoryModalOpen(true)}
         onOpenBatch={() => { setCurrentView('batch'); setActiveReport(null); }}
+        onOpenLeads={handleOpenLeads}
         historyCount={historyReports.length}
         currentView={currentView}
         onNavigateHome={handleNewAudit}
       />
 
       <main className="flex-1">
-        {currentView === 'batch' ? (
+        {currentView === 'leads' ? (
+          <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+            <div className="flex flex-wrap items-end justify-between gap-4 mb-7"><div><p className="text-xs font-semibold tracking-[0.2em] uppercase text-emerald-700 mb-2">Internal pipeline</p><h1 className="text-3xl font-extrabold tracking-tight">Lead tracker</h1><p className="mt-2 text-slate-600">Track outreach status and source notes against persisted audit reports.</p></div><button onClick={handleOpenLeads} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold hover:bg-slate-50">Refresh</button></div>
+            {metrics && <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-7">{[['Audits', metrics.totalAudits], ['Not ready', metrics.verdicts['Not ready'] || 0], ['Risky', metrics.verdicts.Risky || 0], ['Contacted', metrics.messagesSent], ['Interested', metrics.interested]].map(([label, value]) => <div key={String(label)} className="rounded-xl border border-slate-200 bg-white p-4"><p className="text-xs text-slate-500">{label}</p><p className="mt-1 text-2xl font-bold tabular-nums">{value}</p></div>)}</div>}
+            <div className="flex flex-wrap items-center gap-3 mb-5"><label htmlFor="lead-filter" className="text-sm font-semibold">Filter status</label><select id="lead-filter" value={leadFilter} onChange={(event) => setLeadFilter(event.target.value)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"><option value="all">All statuses</option><option>Not contacted</option><option>Contacted</option><option>Replied</option><option>Interested in monitoring</option><option>Not interested</option></select><span className="text-sm text-slate-500">{leads.filter((lead) => leadFilter === 'all' || lead.status === leadFilter).length} leads</span></div>
+            {leadError && <p role="alert" className="mb-5 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">{leadError}</p>}
+            {leadLoading ? <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-slate-500">Loading persisted leads…</div> : leads.filter((lead) => leadFilter === 'all' || lead.status === leadFilter).length === 0 ? <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-slate-600">No saved audits match this filter yet. Run a website audit or batch first.</div> : <div className="space-y-4">{leads.filter((lead) => leadFilter === 'all' || lead.status === leadFilter).map((lead) => {
+              const worst = lead.report.issues.filter((issue) => issue.severity !== 'passed').sort((a, b) => ({ critical: 0, high: 1, medium: 2, low: 3, passed: 4 }[a.severity] - { critical: 0, high: 1, medium: 2, low: 3, passed: 4 }[b.severity])[0];
+              return <article key={lead.auditId} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="flex flex-wrap items-start justify-between gap-3 mb-4"><div className="min-w-0"><p className="font-mono text-sm break-all text-slate-800">{lead.targetValue}</p><p className="mt-1 text-xs text-slate-500">Audited {new Date(lead.createdAt).toLocaleString()} · Score {lead.overallScore} · {lead.verdict}</p><p className="mt-2 text-sm text-slate-700"><span className="font-semibold">Top finding:</span> {worst?.title || 'No failing findings'}</p></div><button onClick={() => { setActiveReport(lead.report); setCurrentView('report'); const url = new URL(window.location.href); url.searchParams.set('auditId', lead.auditId); window.history.pushState({}, '', url.toString()); }} className="text-sm font-semibold text-emerald-700 underline underline-offset-2">Open report</button></div>
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                  <div><label className="block text-xs font-semibold text-slate-600 mb-1">Outreach status</label><select value={lead.status} onChange={(event) => updateLeadField(lead.auditId, 'status', event.target.value)} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"><option>Not contacted</option><option>Contacted</option><option>Replied</option><option>Interested in monitoring</option><option>Not interested</option></select></div>
+                  <div><label className="block text-xs font-semibold text-slate-600 mb-1">Owner handle / email</label><input value={lead.ownerContact} onChange={(event) => updateLeadField(lead.auditId, 'ownerContact', event.target.value)} maxLength={320} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Contact details" /></div>
+                  <div><label className="block text-xs font-semibold text-slate-600 mb-1">Source note</label><input value={lead.sourceNote} onChange={(event) => updateLeadField(lead.auditId, 'sourceNote', event.target.value)} maxLength={300} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="e.g. launch directory" /></div>
+                  <div><label className="block text-xs font-semibold text-slate-600 mb-1">Contact channel</label><input value={lead.contactChannel} onChange={(event) => updateLeadField(lead.auditId, 'contactChannel', event.target.value)} maxLength={120} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Email, X, LinkedIn…" /></div>
+                  <div className="md:col-span-2"><label className="block text-xs font-semibold text-slate-600 mb-1">Notes</label><textarea value={lead.notes} onChange={(event) => updateLeadField(lead.auditId, 'notes', event.target.value)} maxLength={4000} rows={2} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Follow-up context and outcome" /></div>
+                </div>
+                <div className="mt-4 flex items-center justify-between gap-3"><span className="text-xs text-slate-500">Last saved: {new Date(lead.updatedAt).toLocaleString()}</span><button onClick={() => handleSaveLead(lead)} disabled={savingLeadId === lead.auditId} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60">{savingLeadId === lead.auditId ? 'Saving…' : 'Save lead'}</button></div>
+              </article>;
+            })}</div>}
+          </section>
+        ) : currentView === 'batch' ? (
           <section className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
             <div className="max-w-3xl mb-8"><p className="text-xs font-semibold tracking-[0.2em] uppercase text-emerald-700 mb-3">Auditor / Batch workflow</p><h1 className="text-3xl font-extrabold tracking-tight">Audit multiple public sites</h1><p className="mt-3 text-slate-600">Paste up to 20 URLs, one per line. Each site is processed independently, so one failed target will not stop the rest. Audits are passive and read-only.</p></div>
             <div className="bg-white border border-slate-200 rounded-xl p-5 sm:p-7 shadow-sm">
