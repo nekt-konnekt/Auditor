@@ -202,27 +202,24 @@ async function readLimitedText(response: Response): Promise<string> {
 }
 
 export async function fetchPublicPage(input: string, timeoutMs = 12_000, maxRedirects = MAX_REDIRECTS): Promise<{ url: URL; response: Response; html: string }> {
-  let current = await validatePublicHttpUrl(input);
+  let validated = await validatePublicHttpUrlWithAddresses(input);
+  let current = validated.url;
+  let addresses = validated.addresses;
 
   for (let redirects = 0; redirects <= maxRedirects; redirects += 1) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
     let response: Response;
     try {
-      response = await fetch(current, {
-        method: 'GET',
-        redirect: 'manual',
-        signal: controller.signal,
-        headers: {
-          'User-Agent': 'Auditor-Engine/1.0 (+website audit; contact: security@auditor.invalid)',
-          Accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.5',
-        },
+      response = await requestPublicResponse(current, addresses, timeoutMs, MAX_BODY_BYTES, {
+        'User-Agent': 'Auditor-Engine/1.0 (+website audit; contact: security@auditor.invalid)',
+        Accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.5',
       });
     } catch (error) {
-      if (controller.signal.aborted) throw new Error('The target website timed out.');
-      const causeCode = typeof error === 'object' && error !== null && 'cause' in error
-        ? (error as { cause?: { code?: string } }).cause?.code
-        : undefined;
+      if (error instanceof Error && /audit limit|timed out/.test(error.message)) throw error;
+      const causeCode = typeof error === 'object' && error !== null && 'code' in error
+        ? (error as { code?: string }).code
+        : typeof error === 'object' && error !== null && 'cause' in error
+          ? (error as { cause?: { code?: string } }).cause?.code
+          : undefined;
       if (causeCode === 'ENOTFOUND' || causeCode === 'EAI_AGAIN') {
         throw new Error('The target hostname could not be resolved.');
       }
@@ -235,8 +232,6 @@ export async function fetchPublicPage(input: string, timeoutMs = 12_000, maxRedi
         throw new Error('The target server refused or reset the connection, or the network route is unavailable.');
       }
       throw new Error('The target website could not be reached due to a network or TLS connection failure.');
-    } finally {
-      clearTimeout(timeout);
     }
 
     if ([301, 302, 303, 307, 308].includes(response.status)) {
@@ -244,7 +239,9 @@ export async function fetchPublicPage(input: string, timeoutMs = 12_000, maxRedi
       await response.body?.cancel();
       if (!location) throw new Error('The target returned a redirect without a destination.');
       if (redirects === maxRedirects) throw new Error('The target redirected too many times.');
-      current = await validatePublicHttpUrl(new URL(location, current).toString());
+      validated = await validatePublicHttpUrlWithAddresses(new URL(location, current).toString());
+      current = validated.url;
+      addresses = validated.addresses;
       continue;
     }
 
@@ -267,33 +264,38 @@ const RESOURCE_MAX_REDIRECTS = 3;
 
 /** Fetch a small public same-origin resource for passive exposure checks. */
 export async function fetchPublicResource(input: string, expectedOrigin: string, timeoutMs = 6_000, maxRedirects = RESOURCE_MAX_REDIRECTS): Promise<{ url: URL; status: number; contentType: string; body: string } | null> {
-  let current = await validatePublicHttpUrl(input);
+  let validated: { url: URL; addresses: PublicAddress[] };
+  try {
+    validated = await validatePublicHttpUrlWithAddresses(input);
+  } catch {
+    return null;
+  }
+  let current = validated.url;
+  let addresses = validated.addresses;
+
   for (let redirects = 0; redirects <= maxRedirects; redirects += 1) {
     if (current.origin !== expectedOrigin) return null;
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
     let response: Response;
     try {
-      response = await fetch(current, {
-        method: 'GET',
-        redirect: 'manual',
-        signal: controller.signal,
-        headers: {
-          'User-Agent': 'Auditor-Engine/1.0 (+passive public-page audit)',
-          Accept: 'text/plain,application/json,application/javascript,text/javascript,*/*;q=0.2',
-        },
+      response = await requestPublicResponse(current, addresses, timeoutMs, MAX_RESOURCE_BYTES, {
+        'User-Agent': 'Auditor-Engine/1.0 (+passive public-page audit)',
+        Accept: 'text/plain,application/json,application/javascript,text/javascript,*/*;q=0.2',
       });
     } catch {
       return null;
-    } finally {
-      clearTimeout(timeout);
     }
 
     if ([301, 302, 303, 307, 308].includes(response.status)) {
       const location = response.headers.get('location');
       await response.body?.cancel();
       if (!location || redirects === maxRedirects) return null;
-      current = await validatePublicHttpUrl(new URL(location, current).toString());
+      try {
+        validated = await validatePublicHttpUrlWithAddresses(new URL(location, current).toString());
+      } catch {
+        return null;
+      }
+      current = validated.url;
+      addresses = validated.addresses;
       if (current.origin !== expectedOrigin) return null;
       continue;
     }
@@ -301,41 +303,12 @@ export async function fetchPublicResource(input: string, expectedOrigin: string,
       await response.body?.cancel();
       return { url: current, status: response.status, contentType: response.headers.get('content-type') || '', body: '' };
     }
-    const declaredLength = Number(response.headers.get('content-length') || 0);
-    if (declaredLength > MAX_RESOURCE_BYTES) {
-      await response.body?.cancel();
-      return null;
-    }
-    if (!response.body) return { url: current, status: response.status, contentType: response.headers.get('content-type') || '', body: '' };
 
-    const reader = response.body.getReader();
-    const chunks: Uint8Array[] = [];
-    let total = 0;
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        total += value.byteLength;
-        if (total > MAX_RESOURCE_BYTES) {
-          await reader.cancel();
-          return null;
-        }
-        chunks.push(value);
-      }
-    } finally {
-      reader.releaseLock();
-    }
-    const bytes = new Uint8Array(total);
-    let offset = 0;
-    for (const chunk of chunks) {
-      bytes.set(chunk, offset);
-      offset += chunk.byteLength;
-    }
     return {
       url: current,
       status: response.status,
       contentType: response.headers.get('content-type') || '',
-      body: new TextDecoder().decode(bytes),
+      body: await response.text(),
     };
   }
   return null;
