@@ -132,8 +132,9 @@ export async function executeAudit(payload: AuditRequestPayload): Promise<AuditR
     metrics,
   };
 
-  storeReport(report);
-  return report;
+  const safeReport = sanitizeAuditReport(report);
+  await storeReport(safeReport);
+  return safeReport;
 }
 
 export async function getReportById(id: string): Promise<AuditReport | null> {
