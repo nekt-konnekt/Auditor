@@ -20,6 +20,14 @@ Disallow: /members
   assert.deepEqual(rules, ['/members']);
 });
 
+test('robots parser combines adjacent user-agent declarations in one group', () => {
+  const rules = parseRobotsDisallowRules(`User-agent: *
+User-agent: AuditorBot
+Disallow: /private
+`);
+  assert.deepEqual(rules, ['/private']);
+});
+
 test('robots parser tolerates empty and malformed directives', () => {
   assert.deepEqual(parseRobotsDisallowRules('User-agent: *\nDisallow:\nNot a directive'), []);
 });
