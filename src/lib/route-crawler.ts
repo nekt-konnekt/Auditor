@@ -14,8 +14,8 @@ export interface CrawledRoute {
 
 export function parseRobotsDisallowRules(robotsText: string): string[] {
   const rules: string[] = [];
-  let appliesToWildcard = false;
-  let sawUserAgent = false;
+  let agents: string[] = [];
+  let groupHasDirectives = false;
   for (const rawLine of robotsText.split(/\r?\n/)) {
     const line = rawLine.split('#', 1)[0].trim();
     if (!line) continue;
@@ -24,19 +24,21 @@ export function parseRobotsDisallowRules(robotsText: string): string[] {
     const directive = line.slice(0, separator).trim().toLowerCase();
     const value = line.slice(separator + 1).trim();
     if (directive === 'user-agent') {
-      if (!sawUserAgent) {
-        appliesToWildcard = value === '*';
-        sawUserAgent = true;
-      } else {
-        appliesToWildcard = value === '*';
+      if (groupHasDirectives) {
+        agents = [];
+        groupHasDirectives = false;
       }
+      agents.push(value.toLowerCase());
       continue;
     }
-    if (directive === 'disallow' && appliesToWildcard && value.startsWith('/')) {
+    if (directive === 'allow' || directive === 'disallow' || directive === 'crawl-delay' || directive === 'sitemap') {
+      groupHasDirectives = true;
+    }
+    if (directive === 'disallow' && agents.includes('*') && value.startsWith('/')) {
       rules.push(value);
     }
   }
-  return rules;
+  return [...new Set(rules)];
 }
 
 function isDisallowed(pathname: string, rules: string[]): boolean {
