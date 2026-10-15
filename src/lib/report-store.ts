@@ -73,7 +73,7 @@ export async function persistAuditReport(report: AuditReport): Promise<void> {
   );
 
   await sql`
-    INSERT INTO audit_reports
+    INSERT INTO auditor_reports
       (id, created_at, target_value, target_type, verdict, overall_score, report, has_exposure_finding, is_unlisted)
     VALUES
       (${safeReport.id}, ${safeReport.createdAt}, ${targetValue}, ${safeReport.target.type},
@@ -94,7 +94,7 @@ export async function persistAuditReport(report: AuditReport): Promise<void> {
 export async function loadAuditReport(id: string): Promise<AuditReport | null> {
   ensureDatabaseConfigured();
   if (!sql) return null;
-  const rows = await sql`SELECT report FROM audit_reports WHERE id = ${id} LIMIT 1`;
+  const rows = await sql`SELECT report FROM auditor_reports WHERE id = ${id} LIMIT 1`;
   if (!rows.length) return null;
   return sanitizeAuditReport(rows[0].report as AuditReport);
 }
@@ -131,8 +131,8 @@ export async function listAuditLeads(): Promise<LeadRecord[]> {
            COALESCE(l.contact_channel, '') AS contact_channel,
            COALESCE(l.notes, '') AS notes,
            COALESCE(l.updated_at, r.created_at) AS updated_at
-    FROM audit_reports r
-    LEFT JOIN audit_leads l ON l.audit_id = r.id
+    FROM auditor_reports r
+    LEFT JOIN auditor_leads l ON l.audit_id = r.id
     ORDER BY r.created_at DESC
     LIMIT 200
   `;
@@ -163,10 +163,10 @@ export async function upsertAuditLead(auditId: string, lead: {
 }): Promise<boolean> {
   ensureDatabaseConfigured();
   if (!sql) return false;
-  const rows = await sql`SELECT id FROM audit_reports WHERE id = ${auditId} LIMIT 1`;
+  const rows = await sql`SELECT id FROM auditor_reports WHERE id = ${auditId} LIMIT 1`;
   if (!rows.length) return false;
   await sql`
-    INSERT INTO audit_leads
+    INSERT INTO auditor_leads
       (audit_id, status, owner_contact, source_note, contact_channel, notes, updated_at)
     VALUES
       (${auditId}, ${lead.status}, ${lead.ownerContact}, ${lead.sourceNote},
@@ -197,8 +197,8 @@ export async function getAuditValidationMetrics(): Promise<{
            COALESCE(l.status, 'Not contacted') AS status,
            COALESCE(l.source_note, '') AS source_note,
            COUNT(*)::int AS total
-    FROM audit_reports r
-    LEFT JOIN audit_leads l ON l.audit_id = r.id
+    FROM auditor_reports r
+    LEFT JOIN auditor_leads l ON l.audit_id = r.id
     GROUP BY r.verdict, COALESCE(l.status, 'Not contacted'), COALESCE(l.source_note, '')
   `;
   const verdicts: Record<string, number> = {};
