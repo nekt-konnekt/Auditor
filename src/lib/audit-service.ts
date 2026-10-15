@@ -7,7 +7,8 @@ import {
 } from './audit-rules.ts';
 import { analyzeWithGemini } from './gemini-auditor.ts';
 import { auditGitHubRepo, parseGitHubUrl } from './github-auditor.ts';
-import { fetchPublicPage } from './safe-fetch.ts';
+import { fetchPublicPage, validatePublicHttpUrl } from './safe-fetch.ts';
+import { inspectReadinessPreflight } from './readiness-preflight.ts';
 import { loadAuditReport, persistAuditReport, redactSensitiveText, sanitizeAuditReport } from './report-store.ts';
 
 // In-memory cache is intentionally bounded. Durable shared links require a database.
@@ -49,6 +50,28 @@ export async function executeAudit(payload: AuditRequestPayload): Promise<AuditR
       return ghReport;
     }
 
+    const preflightUrl = await validatePublicHttpUrl(normalizedTarget);
+    const preflight = await inspectReadinessPreflight(preflightUrl);
+
+    // Never fetch page content over TLS when the certificate probe found it invalid.
+    if (preflightUrl.protocol === 'https:' && preflight.tlsValid === false) {
+      const { overallScore, categories, verdict } = calculateAuditScores(preflight.issues);
+      const report: AuditReport = {
+        id: reportId,
+        createdAt,
+        target: { type: 'url', target: preflightUrl.toString() },
+        overallScore,
+        verdict,
+        categories,
+        summary: 'Auditor completed a passive TLS/domain preflight but did not fetch page content because the TLS certificate failed validation. Page-level SEO, accessibility, headers, exposure, and route checks were not performed.',
+        issues: preflight.issues,
+        metrics: { ...preflight.metrics, 'Page Content Fetch': 'Not performed: TLS validation failed', 'Route Coverage': 'Not performed' },
+      };
+      const safeReport = sanitizeAuditReport(report);
+      await storeReport(safeReport);
+      return safeReport;
+    }
+
     const startTime = Date.now();
     const { url, response, html } = await fetchPublicPage(normalizedTarget);
     const responseTimeMs = Date.now() - startTime;
@@ -78,7 +101,7 @@ export async function executeAudit(payload: AuditRequestPayload): Promise<AuditR
           additionalIssues: [],
         };
 
-    const allIssues = [...deterministicIssues, ...aiResult.additionalIssues];
+    const allIssues = [...preflight.issues, ...deterministicIssues, ...aiResult.additionalIssues];
     const { overallScore, categories, verdict } = calculateAuditScores(allIssues);
     const report: AuditReport = {
       id: reportId,
@@ -96,7 +119,7 @@ export async function executeAudit(payload: AuditRequestPayload): Promise<AuditR
       categories,
       summary: aiResult.summary,
       issues: allIssues,
-      metrics,
+      metrics: { ...preflight.metrics, ...metrics, 'Route Coverage': 'Submitted URL only', 'Exposure Scan': 'Not performed', 'Browser Runtime Checks': 'Not performed' },
     };
 
     const safeReport = sanitizeAuditReport(report);
