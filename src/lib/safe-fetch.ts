@@ -176,3 +176,83 @@ export async function fetchPublicPage(input: string, timeoutMs = 12_000): Promis
 
   throw new Error('The target redirected too many times.');
 }
+
+
+const MAX_RESOURCE_BYTES = 1_000_000;
+const RESOURCE_MAX_REDIRECTS = 3;
+
+/** Fetch a small public same-origin resource for passive exposure checks. */
+export async function fetchPublicResource(input: string, expectedOrigin: string, timeoutMs = 6_000): Promise<{ url: URL; status: number; contentType: string; body: string } | null> {
+  let current = await validatePublicHttpUrl(input);
+  for (let redirects = 0; redirects <= RESOURCE_MAX_REDIRECTS; redirects += 1) {
+    if (current.origin !== expectedOrigin) return null;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    let response: Response;
+    try {
+      response = await fetch(current, {
+        method: 'GET',
+        redirect: 'manual',
+        signal: controller.signal,
+        headers: {
+          'User-Agent': 'Auditor-Engine/1.0 (+passive public-page audit)',
+          Accept: 'text/plain,application/json,application/javascript,text/javascript,*/*;q=0.2',
+        },
+      });
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    if ([301, 302, 303, 307, 308].includes(response.status)) {
+      const location = response.headers.get('location');
+      await response.body?.cancel();
+      if (!location || redirects === RESOURCE_MAX_REDIRECTS) return null;
+      current = await validatePublicHttpUrl(new URL(location, current).toString());
+      if (current.origin !== expectedOrigin) return null;
+      continue;
+    }
+    if (!response.ok) {
+      await response.body?.cancel();
+      return { url: current, status: response.status, contentType: response.headers.get('content-type') || '', body: '' };
+    }
+    const declaredLength = Number(response.headers.get('content-length') || 0);
+    if (declaredLength > MAX_RESOURCE_BYTES) {
+      await response.body?.cancel();
+      return null;
+    }
+    if (!response.body) return { url: current, status: response.status, contentType: response.headers.get('content-type') || '', body: '' };
+
+    const reader = response.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        total += value.byteLength;
+        if (total > MAX_RESOURCE_BYTES) {
+          await reader.cancel();
+          return null;
+        }
+        chunks.push(value);
+      }
+    } finally {
+      reader.releaseLock();
+    }
+    const bytes = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return {
+      url: current,
+      status: response.status,
+      contentType: response.headers.get('content-type') || '',
+      body: new TextDecoder().decode(bytes),
+    };
+  }
+  return null;
+}
