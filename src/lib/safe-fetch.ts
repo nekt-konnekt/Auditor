@@ -117,10 +117,10 @@ async function readLimitedText(response: Response): Promise<string> {
   return new TextDecoder().decode(combined);
 }
 
-export async function fetchPublicPage(input: string, timeoutMs = 12_000): Promise<{ url: URL; response: Response; html: string }> {
+export async function fetchPublicPage(input: string, timeoutMs = 12_000, maxRedirects = MAX_REDIRECTS): Promise<{ url: URL; response: Response; html: string }> {
   let current = await validatePublicHttpUrl(input);
 
-  for (let redirects = 0; redirects <= MAX_REDIRECTS; redirects += 1) {
+  for (let redirects = 0; redirects <= maxRedirects; redirects += 1) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
     let response: Response;
@@ -159,7 +159,7 @@ export async function fetchPublicPage(input: string, timeoutMs = 12_000): Promis
       const location = response.headers.get('location');
       await response.body?.cancel();
       if (!location) throw new Error('The target returned a redirect without a destination.');
-      if (redirects === MAX_REDIRECTS) throw new Error('The target redirected too many times.');
+      if (redirects === maxRedirects) throw new Error('The target redirected too many times.');
       current = await validatePublicHttpUrl(new URL(location, current).toString());
       continue;
     }
@@ -182,9 +182,9 @@ const MAX_RESOURCE_BYTES = 1_000_000;
 const RESOURCE_MAX_REDIRECTS = 3;
 
 /** Fetch a small public same-origin resource for passive exposure checks. */
-export async function fetchPublicResource(input: string, expectedOrigin: string, timeoutMs = 6_000): Promise<{ url: URL; status: number; contentType: string; body: string } | null> {
+export async function fetchPublicResource(input: string, expectedOrigin: string, timeoutMs = 6_000, maxRedirects = RESOURCE_MAX_REDIRECTS): Promise<{ url: URL; status: number; contentType: string; body: string } | null> {
   let current = await validatePublicHttpUrl(input);
-  for (let redirects = 0; redirects <= RESOURCE_MAX_REDIRECTS; redirects += 1) {
+  for (let redirects = 0; redirects <= maxRedirects; redirects += 1) {
     if (current.origin !== expectedOrigin) return null;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -208,7 +208,7 @@ export async function fetchPublicResource(input: string, expectedOrigin: string,
     if ([301, 302, 303, 307, 308].includes(response.status)) {
       const location = response.headers.get('location');
       await response.body?.cancel();
-      if (!location || redirects === RESOURCE_MAX_REDIRECTS) return null;
+      if (!location || redirects === maxRedirects) return null;
       current = await validatePublicHttpUrl(new URL(location, current).toString());
       if (current.origin !== expectedOrigin) return null;
       continue;
