@@ -107,7 +107,7 @@ export function createPinnedDnsLookup(addresses: ValidatedPublicAddress[]): any 
 /** Make the request using only the DNS addresses already validated above. */
 function requestPublicResponse(
   url: URL,
-  addresses: PublicAddress[],
+  addresses: ValidatedPublicAddress[],
   timeoutMs: number,
   maxBodyBytes: number,
   headers: Record<string, string>,
