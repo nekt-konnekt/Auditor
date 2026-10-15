@@ -1,4 +1,5 @@
 import tls from 'node:tls';
+import { getDomain } from 'tldts';
 import { AuditIssue } from '../types/audit.ts';
 
 export const CERT_NEAR_EXPIRY_DAYS = 30;
@@ -10,6 +11,11 @@ export interface ReadinessPreflight {
   issues: AuditIssue[];
   metrics: Record<string, string | number | boolean>;
   tlsValid: boolean | null;
+}
+
+export function getRegistrableDomain(hostname: string): string {
+  const normalized = hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  return getDomain(normalized, { allowPrivateDomains: false }) || normalized;
 }
 
 function daysUntil(dateValue: string | number | Date): number | null {
@@ -99,7 +105,7 @@ export async function inspectReadinessPreflight(url: URL): Promise<ReadinessPref
   const issues: AuditIssue[] = [];
   const metrics: Record<string, string | number | boolean> = {};
   let tlsValid: boolean | null = null;
-  const domain = url.hostname.replace(/^www\./i, '').toLowerCase();
+  const domain = getRegistrableDomain(url.hostname);
   const registrationPromise = readDomainRegistration(domain);
 
   if (url.protocol !== 'https:') {
