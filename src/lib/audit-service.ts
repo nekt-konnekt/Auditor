@@ -8,6 +8,7 @@ import {
 import { analyzeWithGemini } from './gemini-auditor.ts';
 import { auditGitHubRepo, parseGitHubUrl } from './github-auditor.ts';
 import { fetchPublicPage } from './safe-fetch.ts';
+import { persistAuditReport, sanitizeAuditReport } from './report-store.ts';
 
 // In-memory cache is intentionally bounded. Durable shared links require a database.
 const reportsStore = new Map<string, AuditReport>();
@@ -18,11 +19,12 @@ function generateId(): string {
   return 'aud-' + randomUUID();
 }
 
-function storeReport(report: AuditReport): void {
+async function storeReport(report: AuditReport): Promise<void> {
   const now = Date.now();
   for (const [id, saved] of reportsStore) {
     if (now - Date.parse(saved.createdAt) > REPORT_TTL_MS) reportsStore.delete(id);
   }
+  await persistAuditReport(report);
   reportsStore.delete(report.id);
   reportsStore.set(report.id, report);
   while (reportsStore.size > MAX_REPORTS) {
@@ -42,8 +44,8 @@ export async function executeAudit(payload: AuditRequestPayload): Promise<AuditR
     const normalizedTarget = /^https?:\/\//i.test(cleanTarget) ? cleanTarget : 'https://' + cleanTarget;
 
     if (parseGitHubUrl(normalizedTarget)) {
-      const ghReport = await auditGitHubRepo(normalizedTarget);
-      storeReport(ghReport);
+      const ghReport = sanitizeAuditReport(await auditGitHubRepo(normalizedTarget));
+      await storeReport(ghReport);
       return ghReport;
     }
 
@@ -97,8 +99,9 @@ export async function executeAudit(payload: AuditRequestPayload): Promise<AuditR
       metrics,
     };
 
-    storeReport(report);
-    return report;
+    const safeReport = sanitizeAuditReport(report);
+    await storeReport(safeReport);
+    return safeReport;
   }
 
   const code = payload.code || '';
