@@ -29,7 +29,7 @@ function buildPrompt(type: AuditKind, target: string, content: string, meta: Rec
     '\nLook for evidence-based vulnerabilities and quality issues including OWASP Top 10, CWE patterns, logic errors, input validation, authentication/authorization gaps, and unsafe execution. Do not claim vulnerabilities without evidence. Give actionable remediation.';
 }
 
-const schemaHint = 'Return only a valid JSON object with shape: {"summary":"2-4 sentence executive summary","issues":[{"category":"security|seo|accessibility|performance|quality","severity":"critical|high|medium|low|passed","title":"short title","description":"evidence-based explanation","impact":"real-world impact","remediation":"concrete fix","originalCode":"optional evidence snippet","proposedFix":"optional replacement"}]}. Use an empty issues array when no additional findings are justified.';
+const schemaHint = 'Return only one compact, valid JSON object with shape: {\"summary\":\"2-4 sentence executive summary\",\"issues\":[{\"category\":\"security|seo|accessibility|performance|quality\",\"severity\":\"critical|high|medium|low|passed\",\"title\":\"short title\",\"description\":\"evidence-based explanation\",\"impact\":\"real-world impact\",\"remediation\":\"concrete fix\",\"originalCode\":\"optional short evidence snippet\",\"proposedFix\":\"optional short replacement\"}]}. Return at most 8 issues, keep fields concise, and do not use Markdown fences or text outside the JSON. Use an empty issues array when no additional findings are justified.';
 
 function parseAnalysis(raw: string, type: AuditKind): AiAuditAnalysis {
   // Providers occasionally wrap otherwise valid JSON in Markdown fences or add a short preamble.
