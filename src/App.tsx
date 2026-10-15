@@ -28,6 +28,8 @@ export default function App() {
   const [leadError, setLeadError] = useState<string | null>(null);
   const [savingLeadId, setSavingLeadId] = useState<string | null>(null);
   const [metrics, setMetrics] = useState<{ totalAudits: number; verdicts: Record<string, number>; messagesSent: number; replies: number; interested: number } | null>(null);
+  const [outreachDrafts, setOutreachDrafts] = useState<Record<string, { dm: string; email: string }>>({});
+  const [copiedOutreach, setCopiedOutreach] = useState<string | null>(null);
   const [activeReport, setActiveReport] = useState<AuditReport | null>(null);
   const [historyReports, setHistoryReports] = useState<AuditReport[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -140,6 +142,22 @@ export default function App() {
     setLeads((current) => current.map((lead) => lead.auditId === auditId ? { ...lead, [field]: value } as LeadRecord : lead));
   };
 
+  const prepareOutreach = (lead: LeadRecord) => {
+    const worst = lead.report.issues.filter((issue) => issue.severity !== 'passed').sort((a, b) => severityRank[a.severity] - severityRank[b.severity])[0];
+    const reportUrl = window.location.origin + '/?auditId=' + encodeURIComponent(lead.auditId);
+    const exposedSecret = lead.hasExposureFinding || /exposed secret|\\.env|\\.git|private key|api key/i.test(worst?.title || '');
+    const finding = exposedSecret
+      ? 'A public asset appears to expose a credential-like value. The value is intentionally not reproduced here; rotate the affected key and remove it from client-delivered code.'
+      : worst ? worst.title + ': ' + worst.remediation : 'The audit found opportunities to improve launch readiness.';
+    const dm = 'Hi! I ran a passive check of ' + lead.targetValue + ' using public pages only. One finding worth reviewing: ' + finding + ' I did not attempt login or access private systems. Full report: ' + reportUrl;
+    const email = 'Subject: A launch-readiness finding for ' + lead.targetValue + '\\n\\nHi,\\n\\nI ran a passive, external check of ' + lead.targetValue + ' using publicly accessible pages only. I did not attempt to log in, exploit anything, or access private systems.\\n\\nThe most important finding is: ' + finding + '\\n\\nSuggested next step: ' + (exposedSecret ? 'rotate the affected credential, remove it from public assets, and verify the deployed build no longer exposes it.' : (worst?.remediation || 'review the report and prioritize the highest-severity items.')) + '\\n\\nFull report: ' + reportUrl + '\\n\\nIf useful, I can share the specific check and help verify the fix.\\n\\nRegards';
+    setOutreachDrafts((current) => ({ ...current, [lead.auditId]: { dm, email } }));
+  };
+
+  const copyOutreach = async (key: string, value: string) => {
+    try { await navigator.clipboard.writeText(value); setCopiedOutreach(key); }
+    catch { setLeadError('Clipboard access was blocked. Select the message and copy it manually.'); }
+  };
   const handleSaveLead = async (lead: LeadRecord) => {
     setSavingLeadId(lead.auditId);
     setLeadError(null);
@@ -260,6 +278,12 @@ export default function App() {
                   <div className="md:col-span-2"><label className="block text-xs font-semibold text-slate-600 mb-1">Notes</label><textarea value={lead.notes} onChange={(event) => updateLeadField(lead.auditId, 'notes', event.target.value)} maxLength={4000} rows={2} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Follow-up context and outcome" /></div>
                 </div>
                 <div className="mt-4 flex items-center justify-between gap-3"><span className="text-xs text-slate-500">Last saved: {new Date(lead.updatedAt).toLocaleString()}</span><button onClick={() => handleSaveLead(lead)} disabled={savingLeadId === lead.auditId} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60">{savingLeadId === lead.auditId ? 'Saving…' : 'Save lead'}</button></div>
+                <div className="mt-5 border-t border-slate-100 pt-4"><div className="flex flex-wrap items-center justify-between gap-3"><h3 className="font-semibold text-slate-800">Outreach draft</h3><button onClick={() => prepareOutreach(lead)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold hover:bg-slate-50">{outreachDrafts[lead.auditId] ? 'Regenerate drafts' : 'Prepare outreach'}</button></div>
+                  {outreachDrafts[lead.auditId] && <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <div><label className="block text-xs font-semibold text-slate-600 mb-1">Short DM</label><textarea rows={6} value={outreachDrafts[lead.auditId].dm} onChange={(event) => setOutreachDrafts((current) => ({ ...current, [lead.auditId]: { ...current[lead.auditId], dm: event.target.value } }))} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" /><button onClick={() => copyOutreach(lead.auditId + '-dm', outreachDrafts[lead.auditId].dm)} className="mt-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold">{copiedOutreach === lead.auditId + '-dm' ? 'Copied' : 'Copy DM'}</button></div>
+                    <div><label className="block text-xs font-semibold text-slate-600 mb-1">Email</label><textarea rows={6} value={outreachDrafts[lead.auditId].email} onChange={(event) => setOutreachDrafts((current) => ({ ...current, [lead.auditId]: { ...current[lead.auditId], email: event.target.value } }))} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" /><button onClick={() => copyOutreach(lead.auditId + '-email', outreachDrafts[lead.auditId].email)} className="mt-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold">{copiedOutreach === lead.auditId + '-email' ? 'Copied' : 'Copy email'}</button></div>
+                  </div>}
+                </div>
               </article>;
             })}</div>}
           </section>
