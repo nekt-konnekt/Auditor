@@ -130,8 +130,13 @@ export async function scanPublicExposure(baseUrl: URL, html: string): Promise<Ex
 
     const mapReference = bundle.body.match(/[#@]\s*sourceMappingURL\s*=\s*([^\s*]+)/);
     if (mapReference && requests < MAX_PROBES) {
-      const mapUrl = new URL(mapReference[1], bundle.url);
-      if (mapUrl.origin === baseUrl.origin && /\.map(?:\?|$)/i.test(mapUrl.href)) {
+      let mapUrl: URL | null = null;
+      try {
+        mapUrl = new URL(mapReference[1], bundle.url);
+      } catch {
+        // Ignore malformed source-map references from untrusted public bundles.
+      }
+      if (mapUrl && mapUrl.origin === baseUrl.origin && /\.map(?:\?|$)/i.test(mapUrl.href)) {
         requests += 1;
         const mapResult = await politeFetch(mapUrl.toString(), baseUrl.origin).catch(() => null);
         if (mapResult?.status === 200 && mapResult.body && !isHtml(mapResult.contentType, mapResult.body)
