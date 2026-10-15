@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { executeAudit, getReportById } from './src/lib/audit-service.ts';
 import { generateAuditMarkdown } from './src/lib/markdown-generator.ts';
+import { getAuditValidationMetrics, listAuditLeads, upsertAuditLead, type LeadStatus } from './src/lib/report-store.ts';
 
 dotenv.config();
 
@@ -171,6 +172,50 @@ app.post('/api/audit', async (req, res) => {
     const status = /required|valid|allowed|supported|private|public|resolv|redirect|larger than|timed out|reached|cannot be audited|cannot be empty|limited to/i.test(message) ? 400 : 502;
     console.error('Audit execution failed:', message);
     return res.status(status).json({ error: message });
+  }
+});
+
+const VALID_LEAD_STATUSES = new Set<LeadStatus>([
+  'Not contacted', 'Contacted', 'Replied', 'Interested in monitoring', 'Not interested',
+]);
+
+app.get('/api/leads', async (_req, res) => {
+  try {
+    return res.json({ leads: await listAuditLeads() });
+  } catch (error) {
+    console.error('Lead list failed:', error instanceof Error ? error.message : 'Unknown error');
+    return res.status(500).json({ error: 'Unable to load lead tracker right now.' });
+  }
+});
+
+app.put('/api/leads/:id', async (req, res) => {
+  try {
+    const { status, ownerContact = '', sourceNote = '', contactChannel = '', notes = '' } = req.body ?? {};
+    if (typeof status !== 'string' || !VALID_LEAD_STATUSES.has(status as LeadStatus)) {
+      return res.status(400).json({ error: 'Invalid lead status.' });
+    }
+    const fields = { ownerContact, sourceNote, contactChannel, notes };
+    if (Object.values(fields).some((value) => typeof value !== 'string')) {
+      return res.status(400).json({ error: 'Lead fields must be text.' });
+    }
+    if (ownerContact.length > 320 || sourceNote.length > 300 || contactChannel.length > 120 || notes.length > 4000) {
+      return res.status(400).json({ error: 'One or more lead fields exceed the allowed length.' });
+    }
+    const updated = await upsertAuditLead(req.params.id, { status: status as LeadStatus, ownerContact, sourceNote, contactChannel, notes });
+    if (!updated) return res.status(404).json({ error: 'Audit report not found.' });
+    return res.json({ status: 'saved', auditId: req.params.id });
+  } catch (error) {
+    console.error('Lead update failed:', error instanceof Error ? error.message : 'Unknown error');
+    return res.status(500).json({ error: 'Unable to save lead details right now.' });
+  }
+});
+
+app.get('/api/metrics', async (_req, res) => {
+  try {
+    return res.json(await getAuditValidationMetrics());
+  } catch (error) {
+    console.error('Validation metrics failed:', error instanceof Error ? error.message : 'Unknown error');
+    return res.status(500).json({ error: 'Unable to load validation metrics right now.' });
   }
 });
 
