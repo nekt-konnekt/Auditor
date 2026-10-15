@@ -99,6 +99,8 @@ export async function inspectReadinessPreflight(url: URL): Promise<ReadinessPref
   const issues: AuditIssue[] = [];
   const metrics: Record<string, string | number | boolean> = {};
   let tlsValid: boolean | null = null;
+  const domain = url.hostname.replace(/^www\./i, '').toLowerCase();
+  const registrationPromise = readDomainRegistration(domain);
 
   if (url.protocol !== 'https:') {
     tlsValid = false;
@@ -163,8 +165,7 @@ export async function inspectReadinessPreflight(url: URL): Promise<ReadinessPref
     }
   }
 
-  const domain = url.hostname.replace(/^www\./i, '').toLowerCase();
-  const registration = await readDomainRegistration(domain);
+  const registration = await registrationPromise;
   if (!registration) {
     metrics['Domain Expiry Status'] = 'Could not determine';
     issues.push({
