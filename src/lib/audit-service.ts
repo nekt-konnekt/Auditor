@@ -11,6 +11,7 @@ import { fetchPublicPage, validatePublicHttpUrl } from './safe-fetch.ts';
 import { inspectReadinessPreflight } from './readiness-preflight.ts';
 import { scanPublicExposure } from './exposure-scan.ts';
 import { detectPlatform } from './platform-detection.ts';
+import { crawlAdditionalRoutes, MAX_ADDITIONAL_ROUTES } from './route-crawler.ts';
 import { loadAuditReport, persistAuditReport, redactSensitiveText, sanitizeAuditReport } from './report-store.ts';
 
 // In-memory cache is intentionally bounded. Durable shared links require a database.
@@ -109,7 +110,24 @@ export async function executeAudit(payload: AuditRequestPayload): Promise<AuditR
           additionalIssues: [],
         };
 
-    const allIssues = [...preflight.issues, ...exposureResult.issues, ...platformIssues, ...deterministicIssues, ...aiResult.additionalIssues];
+    const routeCrawl = await crawlAdditionalRoutes(url, html);
+    const routeIssues = routeCrawl.routes.flatMap((route) => {
+      const routeAudit = runUrlDeterministicAudit({
+        url: route.url.toString(),
+        statusCode: route.statusCode,
+        headers: route.headers,
+        html: route.html,
+        responseTimeMs: route.responseTimeMs,
+      });
+      const routeLabel = route.url.pathname;
+      return routeAudit.issues.map((issue) => ({
+        ...issue,
+        id: `${issue.id}-route-${Buffer.from(routeLabel).toString('base64url').slice(0, 24)}`,
+        title: `[${routeLabel}] ${issue.title}`,
+        description: `Route check for ${route.url.toString()}. ${issue.description}`,
+      }));
+    });
+    const allIssues = [...preflight.issues, ...exposureResult.issues, ...platformIssues, ...deterministicIssues, ...aiResult.additionalIssues, ...routeIssues];
     const { overallScore, categories, verdict } = calculateAuditScores(allIssues);
     const report: AuditReport = {
       id: reportId,
@@ -127,7 +145,7 @@ export async function executeAudit(payload: AuditRequestPayload): Promise<AuditR
       categories,
       summary: aiResult.summary,
       issues: allIssues,
-      metrics: { ...preflight.metrics, ...metrics, ...exposureResult.metrics, 'Route Coverage': 'Submitted URL only', 'Browser Runtime Checks': 'Not performed', 'Detected Platforms': platformSignals.platforms.join(', ') || 'No reliable fingerprint detected' },
+      metrics: { ...preflight.metrics, ...metrics, ...exposureResult.metrics, 'Route Coverage': `${routeCrawl.routes.length + 1} page(s) audited (submitted page plus ${routeCrawl.routes.length} additional routes)`, 'Additional Routes Attempted': routeCrawl.attempted, 'Additional Route Budget': MAX_ADDITIONAL_ROUTES, 'Robots.txt': 'Checked before discovering additional same-origin routes', 'Browser Runtime Checks': 'Not performed', 'Detected Platforms': platformSignals.platforms.join(', ') || 'No reliable fingerprint detected' },
     };
 
     const safeReport = sanitizeAuditReport(report);
