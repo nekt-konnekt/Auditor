@@ -1,6 +1,6 @@
 /**
- * @deprecated Compatibility shim. Auditor now uses Alibaba Cloud Model Studio.
- * Import analyzeWithAlibabaCloud from './alibaba-auditor.ts' for new code.
+ * @deprecated Compatibility shim for older imports.
+ * Gemini is the default provider; configure AI_FALLBACK_PROVIDERS to select fallbacks.
  */
-export { analyzeWithAlibabaCloud as analyzeWithGemini } from './alibaba-auditor.ts';
-export type { AiAuditAnalysis as GeminiAuditAnalysis } from './alibaba-auditor.ts';
+export { analyzeWithAI as analyzeWithGemini, analyzeWithAI } from './ai-auditor.ts';
+export type { AiAuditAnalysis as GeminiAuditAnalysis } from './ai-auditor.ts';
