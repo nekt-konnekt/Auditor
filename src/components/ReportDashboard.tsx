@@ -176,6 +176,31 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
         </div>
       )}
 
+      {/* Readiness verdict is deliberately separate from the numeric score. */}
+      <section
+        aria-label="Launch readiness verdict"
+        className={`rounded-xl border p-5 ${report.verdict === 'Ready'
+          ? 'border-emerald-300 bg-emerald-50 text-emerald-950'
+          : report.verdict === 'Risky'
+          ? 'border-amber-300 bg-amber-50 text-amber-950'
+          : 'border-rose-300 bg-rose-50 text-rose-950'}`}
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wider">Launch readiness</p>
+            <h2 className="mt-1 text-2xl font-extrabold">{report.verdict}</h2>
+            <p className="mt-1 text-sm">
+              {report.verdict === 'Not ready'
+                ? 'At least one finding is explicitly marked as a launch blocker. Resolve blockers before launch.'
+                : report.verdict === 'Risky'
+                ? 'High-severity findings need review. The numeric score does not override this verdict.'
+                : 'No launch blockers or high-severity findings were identified by the checks performed.'}
+            </p>
+          </div>
+          <span className="text-xs font-mono font-semibold">Verdict is independent of score</span>
+        </div>
+      </section>
+
       {/* KPI Scores Row */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         {/* Overall Score */}
@@ -184,7 +209,11 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
             {isHttpErrorResponse ? 'Diagnostic Score · Error Response' : 'Overall Health'}
           </span>
           <div className="mt-2 flex items-baseline gap-1">
-            <span className="text-4xl font-extrabold text-slate-900 font-mono tabular-nums">
+            <span className={`text-4xl font-extrabold font-mono tabular-nums ${report.verdict === 'Ready'
+              ? 'text-emerald-800'
+              : report.verdict === 'Risky'
+              ? 'text-amber-800'
+              : 'text-rose-800'}`}>
               {report.overallScore}
             </span>
             <span className="text-sm font-medium text-slate-400 font-mono">/100</span>
@@ -194,9 +223,9 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
             <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
               <div
                 className={`h-1.5 rounded-full ${
-                  report.overallScore >= 80
+                  report.verdict === 'Ready'
                     ? 'bg-emerald-600'
-                    : report.overallScore >= 50
+                    : report.verdict === 'Risky'
                     ? 'bg-amber-500'
                     : 'bg-rose-600'
                 }`}
