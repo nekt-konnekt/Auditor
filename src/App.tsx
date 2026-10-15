@@ -14,7 +14,11 @@ import { AuditReport, AuditRequestPayload } from './types/audit.ts';
 const STORAGE_KEY = 'auditor_history_reports_v1';
 
 export default function App() {
-  const [currentView, setCurrentView] = useState<'form' | 'report'>('form');
+  const [currentView, setCurrentView] = useState<'form' | 'report' | 'batch'>('form');
+  const [batchTargets, setBatchTargets] = useState('');
+  const [batchLoading, setBatchLoading] = useState(false);
+  const [batchError, setBatchError] = useState<string | null>(null);
+  const [batchResults, setBatchResults] = useState<Array<{ index: number; target: string; report?: AuditReport; error?: string }>>([]);
   const [activeReport, setActiveReport] = useState<AuditReport | null>(null);
   const [historyReports, setHistoryReports] = useState<AuditReport[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -104,6 +108,37 @@ export default function App() {
     }
   };
 
+  const handleRunBatch = async () => {
+    const targets = [...new Set(batchTargets.split(/\\r?\\n/).map((value) => value.trim()).filter(Boolean))];
+    if (!targets.length) {
+      setBatchError('Paste at least one public URL, one per line.');
+      return;
+    }
+    if (targets.length > 20) {
+      setBatchError('Batch audits support up to 20 unique URLs at a time.');
+      return;
+    }
+    setBatchError(null);
+    setBatchLoading(true);
+    setBatchResults([]);
+    try {
+      const response = await fetch('/api/audit/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targets: targets.map((target) => ({ target })) }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || `Batch request failed (HTTP ${response.status}).`);
+      const results = Array.isArray(data.results) ? data.results as Array<{ index: number; target: string; report?: AuditReport; error?: string }> : [];
+      setBatchResults(results);
+      results.forEach((item) => { if (item.report) saveReportToHistory(item.report); });
+    } catch (error) {
+      setBatchError(error instanceof Error ? error.message : 'Batch audit failed. Try again.');
+    } finally {
+      setBatchLoading(false);
+    }
+  };
+
   const handleNewAudit = () => {
     setCurrentView('form');
     // Clear URL query
@@ -148,6 +183,7 @@ export default function App() {
       <Navbar
         onNewAudit={handleNewAudit}
         onOpenHistory={() => setIsHistoryModalOpen(true)}
+        onOpenBatch={() => { setCurrentView('batch'); setActiveReport(null); }}
         historyCount={historyReports.length}
         currentView={currentView}
         onNavigateHome={handleNewAudit}
