@@ -150,6 +150,34 @@ app.post('/api/audit', async (req, res) => {
   }
 });
 
+app.get('/api/report/:id/compare/:previousId', async (req, res) => {
+  const current = await getReportById(req.params.id);
+  const previous = await getReportById(req.params.previousId);
+  if (!current || !previous) return res.status(404).json({ error: 'Both reports must exist to compare them.' });
+  if (current.target.type !== previous.target.type || current.target.target.replace(/\/$/, '') !== previous.target.target.replace(/\/$/, '')) {
+    return res.status(400).json({ error: 'Reports must target the same URL or code file.' });
+  }
+  const signature = (issue: (typeof current.issues)[number]) => `${issue.category}|${issue.title.toLowerCase().trim()}`;
+  const previousIssues = new Map(previous.issues.map((issue) => [signature(issue), issue]));
+  const currentIssues = new Map(current.issues.map((issue) => [signature(issue), issue]));
+  const added = current.issues.filter((issue) => !previousIssues.has(signature(issue)));
+  const resolved = previous.issues.filter((issue) => !currentIssues.has(signature(issue)));
+  return res.json({
+    target: current.target.target,
+    currentReportId: current.id,
+    previousReportId: previous.id,
+    currentCreatedAt: current.createdAt,
+    previousCreatedAt: previous.createdAt,
+    scoreDelta: current.overallScore - previous.overallScore,
+    verdictChanged: current.verdict !== previous.verdict,
+    previousVerdict: previous.verdict,
+    currentVerdict: current.verdict,
+    addedFindings: added,
+    resolvedFindings: resolved,
+    unchangedFindingCount: current.issues.length - added.length,
+  });
+});
+
 app.get('/api/report/:id', async (req, res) => {
   const report = await getReportById(req.params.id);
   if (!report) return res.status(404).json({ error: 'Report not found or expired.' });
