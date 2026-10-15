@@ -50,6 +50,12 @@ export function sanitizeAuditReport(report: AuditReport): AuditReport {
   };
 }
 
+export async function verifyDatabaseConnection(): Promise<void> {
+  ensureDatabaseConfigured();
+  if (!sql) throw new Error('Database is not configured.');
+  await sql`SELECT 1 AS auditor_database_ready`;
+}
+
 function ensureDatabaseConfigured(): void {
   if (!sql && process.env.NODE_ENV === 'production') {
     throw new Error('DATABASE_URL must be configured in production for durable audit reports.');
