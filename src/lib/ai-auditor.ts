@@ -95,7 +95,7 @@ async function analyzeOpenAICompatible(provider: Provider, prompt: string, apiKe
     body: JSON.stringify({
       model,
       temperature: 0.1,
-      max_tokens: 2200,
+      max_tokens: 4000,
       response_format: { type: 'json_object' },
       messages: [{ role: 'system', content: schemaHint }, { role: 'user', content: prompt }],
     }),
