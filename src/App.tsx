@@ -337,6 +337,7 @@ export default function App() {
         ) : currentView === 'form' || !activeReport ? (
           <AuditForm onStartAudit={handleStartAudit} isLoading={isLoading} />
         ) : (
+          <>
           <ReportDashboard
             report={activeReport}
             onBackToStudio={handleNewAudit}
@@ -346,6 +347,7 @@ export default function App() {
           />
           {rescanError && <p role="alert" className="mx-4 mb-5 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">{rescanError}</p>}
           {rescanDiff && <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-10"><div className="rounded-xl border border-slate-200 bg-white p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-xl font-bold">Re-scan comparison</h2><p className="mt-1 text-sm text-slate-600">{rescanDiff.target}</p></div><p className="text-sm font-semibold">Score change: {rescanDiff.scoreDelta > 0 ? '+' : ''}{rescanDiff.scoreDelta}</p></div><p className="mt-3 text-sm">Verdict: {rescanDiff.previousVerdict} → <strong>{rescanDiff.currentVerdict}</strong> · {rescanDiff.unchangedFindingCount} unchanged finding(s)</p><div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4"><div className="rounded-lg bg-rose-50 p-4"><h3 className="font-semibold text-rose-900">New findings ({rescanDiff.addedFindings.length})</h3>{rescanDiff.addedFindings.length ? <ul className="mt-2 list-disc pl-5 text-sm text-rose-900">{rescanDiff.addedFindings.map((item, index) => <li key={item.title + index}>{item.severity.toUpperCase()}: {item.title}</li>)}</ul> : <p className="mt-2 text-sm text-rose-800">No new findings.</p>}</div><div className="rounded-lg bg-emerald-50 p-4"><h3 className="font-semibold text-emerald-900">Resolved findings ({rescanDiff.resolvedFindings.length})</h3>{rescanDiff.resolvedFindings.length ? <ul className="mt-2 list-disc pl-5 text-sm text-emerald-900">{rescanDiff.resolvedFindings.map((item, index) => <li key={item.title + index}>{item.severity.toUpperCase()}: {item.title}</li>)}</ul> : <p className="mt-2 text-sm text-emerald-800">No previously recorded findings were resolved.</p>}</div></div></div></section>}
+          </>
         )}
       </main>
 
