@@ -10,10 +10,10 @@ type Provider = 'gemini' | 'alibaba' | 'groq' | 'openrouter' | 'openai-compatibl
 
 const validCategories = ['security', 'seo', 'accessibility', 'performance', 'quality'];
 const validSeverities = ['critical', 'high', 'medium', 'low', 'passed'];
-const fallbackSummary = (type: AuditKind, target: string, provider: string) =>
+const fallbackSummary = (type: AuditKind, target: string, _provider: string) =>
   type === 'url'
-    ? 'Audit conducted on ' + target + '. Deterministic checks evaluated HTTP headers, SEO metadata, markup accessibility, and response timing. AI analysis was unavailable; configure GEMINI_API_KEY or a fallback provider to enable deeper analysis.'
-    : 'Static source code audit performed for ' + target + '. Deterministic checks scanned common patterns. AI analysis was unavailable; configure GEMINI_API_KEY or a fallback provider to enable deeper analysis.';
+    ? 'Audit conducted on ' + target + '. Deterministic checks evaluated HTTP headers, SEO metadata, markup accessibility, and response timing. AI enrichment was unavailable for this run; the findings below are based on deterministic checks.'
+    : 'Static source code audit performed for ' + target + '. Deterministic checks scanned common patterns. AI enrichment was unavailable for this run; the findings below are based on deterministic checks.';
 
 function buildPrompt(type: AuditKind, target: string, content: string, meta: Record<string, any>): string {
   if (type === 'url') {
@@ -32,7 +32,14 @@ function buildPrompt(type: AuditKind, target: string, content: string, meta: Rec
 const schemaHint = 'Return only a valid JSON object with shape: {"summary":"2-4 sentence executive summary","issues":[{"category":"security|seo|accessibility|performance|quality","severity":"critical|high|medium|low|passed","title":"short title","description":"evidence-based explanation","impact":"real-world impact","remediation":"concrete fix","originalCode":"optional evidence snippet","proposedFix":"optional replacement"}]}. Use an empty issues array when no additional findings are justified.';
 
 function parseAnalysis(raw: string, type: AuditKind): AiAuditAnalysis {
-  const parsed = JSON.parse(raw);
+  // Providers occasionally wrap otherwise valid JSON in Markdown fences or add a short preamble.
+  // Extract the outermost object before parsing; malformed/truncated JSON still fails safely.
+  const trimmed = raw.trim();
+  const unfenced = trimmed.replace(/^\x60{3}(?:json)?\s*/i, '').replace(/\s*\x60{3}\s*$/, '');
+  const start = unfenced.indexOf('{');
+  const end = unfenced.lastIndexOf('}');
+  const jsonText = start >= 0 && end > start ? unfenced.slice(start, end + 1) : unfenced;
+  const parsed = JSON.parse(jsonText);
   const rawIssues = Array.isArray(parsed.issues) ? parsed.issues : [];
   const additionalIssues: AuditIssue[] = rawIssues
     .filter((item: any) => item && typeof item.title === 'string' && typeof item.description === 'string')
@@ -146,7 +153,14 @@ export async function analyzeWithAI(
       continue;
     }
     const config = getProviderConfig(provider);
-    if (!config.key || (provider !== 'gemini' && (!config.baseUrl || !config.model))) continue;
+    if (!config.key) {
+      console.warn('Auditor AI provider skipped: missing API key for', provider);
+      continue;
+    }
+    if (provider !== 'gemini' && (!config.baseUrl || !config.model)) {
+      console.warn('Auditor AI provider skipped: missing base URL or model for', provider);
+      continue;
+    }
     try {
       const raw = provider === 'gemini'
         ? await analyzeWithGemini(prompt, config.key, config.model)
