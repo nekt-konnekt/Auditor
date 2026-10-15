@@ -157,7 +157,9 @@ function requestPublicResponse(
           if (value !== undefined) responseHeaders.set(key, Array.isArray(value) ? value.join(', ') : String(value));
         }
         settled = true;
-        resolve(new Response(Buffer.concat(chunks), { status: incoming.statusCode || 502, headers: responseHeaders }));
+        const status = incoming.statusCode || 502;
+        const body = [204, 205, 304].includes(status) ? null : Buffer.concat(chunks);
+        resolve(new Response(body, { status, headers: responseHeaders }));
       });
     });
     request.setTimeout(timeoutMs, () => request.destroy(new Error('The target website timed out.')));
