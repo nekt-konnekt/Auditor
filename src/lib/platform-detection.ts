@@ -34,3 +34,25 @@ export function detectPlatform(headers: Record<string, string>, html: string): P
 
   return { platforms: [...found], evidence: [...new Set(evidence)] };
 }
+
+const PLATFORM_GUIDANCE: Record<string, string> = {
+  'Next.js': 'Keep credentials and privileged API calls server-side; review server/client component boundaries, deployment environment variables, caching, and response security headers.',
+  WordPress: 'Update WordPress core, themes, and plugins; remove unused extensions; enforce least-privilege accounts; and verify backups and file permissions.',
+  Shopify: 'Review third-party app permissions and theme code; keep private credentials out of storefront JavaScript and custom liquid templates.',
+  Webflow: 'Review custom code embeds and connected forms; keep private integration keys server-side and verify third-party script permissions.',
+  Wix: 'Review custom code and app permissions; keep private keys in server-side integrations and minimize third-party script access.',
+  Squarespace: 'Review code injection and connected extensions; never place private credentials in browser-delivered scripts.',
+  Drupal: 'Patch Drupal core and contributed modules; review roles, file permissions, and public file exposure.',
+  Joomla: 'Patch Joomla core and extensions; review administrator accounts, extension permissions, and public file exposure.',
+  React: 'Treat every bundled value as public; move credentials server-side and apply a restrictive Content Security Policy.',
+  Vue: 'Treat every bundled value as public; move credentials server-side and review exposed build-time environment variables.',
+  Cloudflare: 'Use WAF rules and rate limiting where appropriate; restrict origin access and verify TLS and security headers at both edge and origin.',
+  Vercel: 'Keep secrets in server-only environment variables; review preview deployment protection, serverless function access, and response headers.',
+  Netlify: 'Keep secrets out of client build variables; review deploy previews, function permissions, and response security headers.',
+  Nginx: 'Verify TLS configuration, security headers, access controls, and that directory listing and sensitive paths are disabled.',
+  Apache: 'Verify TLS configuration, security headers, access controls, and that directory listing and sensitive paths are disabled.',
+};
+
+export function getPlatformGuidance(platforms: string[]): string[] {
+  return platforms.map((platform) => PLATFORM_GUIDANCE[platform]).filter((guidance): guidance is string => Boolean(guidance));
+}
