@@ -77,7 +77,7 @@ export async function executeAudit(payload: AuditRequestPayload): Promise<AuditR
         };
 
     const allIssues = [...deterministicIssues, ...aiResult.additionalIssues];
-    const { overallScore, categories } = calculateAuditScores(allIssues);
+    const { overallScore, categories, verdict } = calculateAuditScores(allIssues);
     const report: AuditReport = {
       id: reportId,
       createdAt,
@@ -90,6 +90,7 @@ export async function executeAudit(payload: AuditRequestPayload): Promise<AuditR
         resourceSizeKb: Math.round((new TextEncoder().encode(html).byteLength / 1024) * 10) / 10,
       },
       overallScore,
+      verdict,
       categories,
       summary: aiResult.summary,
       issues: allIssues,
@@ -109,7 +110,7 @@ export async function executeAudit(payload: AuditRequestPayload): Promise<AuditR
   const { issues: deterministicIssues, metrics } = runCodeDeterministicAudit({ code, language, filename });
   const aiResult = await analyzeWithGemini('code', filename, code, { language, filename });
   const allIssues = [...deterministicIssues, ...aiResult.additionalIssues];
-  const { overallScore, categories } = calculateAuditScores(allIssues);
+  const { overallScore, categories, verdict } = calculateAuditScores(allIssues);
   const report: AuditReport = {
     id: reportId,
     createdAt,
@@ -121,6 +122,7 @@ export async function executeAudit(payload: AuditRequestPayload): Promise<AuditR
       resourceSizeKb: Math.round((new TextEncoder().encode(code).byteLength / 1024) * 10) / 10,
     },
     overallScore,
+    verdict,
     categories,
     summary: aiResult.summary,
     issues: allIssues,
