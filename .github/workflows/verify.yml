@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - audit/security-and-deploy-readiness
+      - upgrade/persistence-and-readiness-checks
   pull_request:
     branches:
       - main
