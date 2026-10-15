@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { executeAudit, getReportById } from './src/lib/audit-service.ts';
 import { generateAuditMarkdown } from './src/lib/markdown-generator.ts';
-import { getAuditValidationMetrics, listAuditLeads, upsertAuditLead, type LeadStatus } from './src/lib/report-store.ts';
+import { getAuditValidationMetrics, listAuditLeads, upsertAuditLead, verifyDatabaseConnection, type LeadStatus } from './src/lib/report-store.ts';
 
 dotenv.config();
 
@@ -88,6 +88,17 @@ app.use('/api/audit', (req, res, next) => {
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', time: new Date().toISOString() });
 });
+
+app.get('/api/health/ready', async (_req, res) => {
+  try {
+    await verifyDatabaseConnection();
+    return res.json({ status: 'ready', database: 'reachable', time: new Date().toISOString() });
+  } catch {
+    return res.status(503).json({ status: 'not_ready', database: 'unavailable', time: new Date().toISOString() });
+  }
+});
+
+
 
 const batchRequests = new Map<string, number[]>();
 const BATCH_RATE_WINDOW_MS = 15 * 60 * 1000;
