@@ -70,7 +70,7 @@ async function analyzeWithGemini(prompt: string, apiKey: string, model: string):
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: schemaHint }] },
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.1, maxOutputTokens: 2200, responseMimeType: 'application/json' },
+      generationConfig: { maxOutputTokens: 2200, responseMimeType: 'application/json' },
     }),
     signal: AbortSignal.timeout(45000),
   });
@@ -103,7 +103,7 @@ async function analyzeOpenAICompatible(provider: Provider, prompt: string, apiKe
 
 function getProviderConfig(provider: Provider): { key?: string; baseUrl: string; model: string } {
   if (provider === 'gemini') {
-    return { key: process.env.GEMINI_API_KEY, baseUrl: '', model: process.env.GEMINI_MODEL || 'gemini-2.5-flash' };
+    return { key: process.env.GEMINI_API_KEY, baseUrl: '', model: process.env.GEMINI_MODEL || 'gemini-3.8-flash' };
   }
   if (provider === 'alibaba') {
     return {
