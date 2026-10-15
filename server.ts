@@ -63,6 +63,8 @@ const auditRequests = new Map<string, number[]>();
 const RATE_WINDOW_MS = 15 * 60 * 1000;
 const RATE_MAX_REQUESTS = 10;
 app.use('/api/audit', (req, res, next) => {
+  // Batch jobs have a separate limiter below.
+  if (req.path === '/batch') return next();
   const now = Date.now();
   const key = req.ip || req.socket.remoteAddress || 'unknown';
   const recent = (auditRequests.get(key) || []).filter((time) => now - time < RATE_WINDOW_MS);
@@ -86,10 +88,32 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', time: new Date().toISOString() });
 });
 
+const batchRequests = new Map<string, number[]>();
+const BATCH_RATE_WINDOW_MS = 15 * 60 * 1000;
+const BATCH_RATE_MAX_REQUESTS = 3;
+
+app.use('/api/audit/batch', (req, res, next) => {
+  const now = Date.now();
+  const key = req.ip || req.socket.remoteAddress || 'unknown';
+  const recent = (batchRequests.get(key) || []).filter((time) => now - time < BATCH_RATE_WINDOW_MS);
+  if (recent.length >= BATCH_RATE_MAX_REQUESTS) {
+    res.setHeader('Retry-After', String(Math.ceil((BATCH_RATE_WINDOW_MS - (now - recent[0])) / 1000)));
+    return res.status(429).json({ error: 'Batch audit limit reached. Try again in a few minutes.' });
+  }
+  recent.push(now);
+  batchRequests.set(key, recent);
+  if (batchRequests.size > 5000) {
+    for (const [ip, timestamps] of batchRequests) {
+      if (!timestamps.some((time) => now - time < BATCH_RATE_WINDOW_MS)) batchRequests.delete(ip);
+    }
+  }
+  next();
+});
+
 app.post('/api/audit/batch', async (req, res) => {
   const targets = req.body?.targets;
-  if (!Array.isArray(targets) || targets.length < 1 || targets.length > 5) {
-    return res.status(400).json({ error: 'Provide between 1 and 5 audit targets.' });
+  if (!Array.isArray(targets) || targets.length < 1 || targets.length > 20) {
+    return res.status(400).json({ error: 'Provide between 1 and 20 audit targets.' });
   }
   if (targets.some((item) => !item || typeof item.target !== 'string' || !item.target.trim())) {
     return res.status(400).json({ error: 'Each batch item must include a target URL.' });
