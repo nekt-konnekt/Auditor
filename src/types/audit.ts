@@ -1,11 +1,15 @@
 export type Severity = 'critical' | 'high' | 'medium' | 'low' | 'passed';
 
+export type ReadinessVerdict = 'Ready' | 'Risky' | 'Not ready';
+
 export type Category = 'security' | 'seo' | 'accessibility' | 'performance' | 'quality';
 
 export interface AuditIssue {
   id: string;
   category: Category;
   severity: Severity;
+  /** True only when this finding independently blocks launch readiness. */
+  readinessBlocker?: boolean;
   title: string;
   description: string;
   impact?: string;
@@ -43,6 +47,7 @@ export interface AuditReport {
   createdAt: string;
   target: AuditTargetMeta;
   overallScore: number;
+  verdict: ReadinessVerdict;
   categories: Record<Category, CategoryScore>;
   summary: string;
   issues: AuditIssue[];
