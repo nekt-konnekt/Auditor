@@ -1,5 +1,7 @@
 import tls from 'node:tls';
+import { isIP } from 'node:net';
 import { getDomain } from 'tldts';
+import { createPinnedDnsLookup, getValidatedPublicAddresses } from './safe-fetch.ts';
 import { AuditIssue } from '../types/audit.ts';
 
 export const CERT_NEAR_EXPIRY_DAYS = 30;
@@ -24,12 +26,21 @@ function daysUntil(dateValue: string | number | Date): number | null {
   return Math.ceil((timestamp - Date.now()) / 86_400_000);
 }
 
-async function readCertificate(hostname: string, port: number): Promise<{
+async function readCertificate(url: URL): Promise<{
   valid: boolean;
   expiresAt: string;
   issuer: string;
   daysRemaining: number;
 } | null> {
+  const hostname = url.hostname.replace(/^\[|\]$/g, '');
+  let addresses;
+  try {
+    addresses = await getValidatedPublicAddresses(url.toString());
+  } catch {
+    return null;
+  }
+  if (!addresses.length) return null;
+  const port = Number(url.port || 443);
   return new Promise((resolve) => {
     let settled = false;
     const finish = (value: ReturnType<typeof readCertificate> extends Promise<infer T> ? T : never) => {
@@ -40,7 +51,8 @@ async function readCertificate(hostname: string, port: number): Promise<{
     const socket = tls.connect({
       host: hostname,
       port,
-      servername: hostname,
+      ...(isIP(hostname) ? {} : { servername: hostname }),
+      lookup: createPinnedDnsLookup(addresses),
       rejectUnauthorized: false,
       timeout: TLS_TIMEOUT_MS,
     });
@@ -120,7 +132,7 @@ export async function inspectReadinessPreflight(url: URL): Promise<ReadinessPref
       remediation: 'Configure a valid TLS certificate and redirect HTTP traffic to HTTPS.',
     });
   } else {
-    const certificate = await readCertificate(url.hostname, Number(url.port || 443));
+    const certificate = await readCertificate(url);
     if (!certificate) {
       metrics['TLS Certificate Status'] = 'Could not determine';
       issues.push({
