@@ -1,5 +1,5 @@
 import * as cheerio from 'cheerio';
-import { AuditIssue, AuditReport, Category, CategoryScore } from '../types/audit.ts';
+import { AuditIssue, AuditReport, Category, CategoryScore, ReadinessVerdict } from '../types/audit.ts';
 
 export interface UrlAuditInput {
   url: string;
@@ -717,11 +717,22 @@ export function runCodeDeterministicAudit(input: CodeAuditInput): {
 }
 
 /**
- * Compute normalized scores for each category and overall rating
+ * A readiness verdict is independent from the numeric quality score.
+ * Explicit blockers always win; critical/high findings without a blocker are Risky.
+ */
+export function calculateReadinessVerdict(issues: AuditIssue[]): ReadinessVerdict {
+  if (issues.some((issue) => issue.readinessBlocker === true)) return 'Not ready';
+  if (issues.some((issue) => issue.severity === 'critical' || issue.severity === 'high')) return 'Risky';
+  return 'Ready';
+}
+
+/**
+ * Compute normalized category scores and an independent launch-readiness verdict.
  */
 export function calculateAuditScores(issues: AuditIssue[]): {
   overallScore: number;
   categories: Record<Category, CategoryScore>;
+  verdict: ReadinessVerdict;
 } {
   const categories: Category[] = ['security', 'seo', 'accessibility', 'performance', 'quality'];
   const result: Record<Category, CategoryScore> = {
@@ -765,5 +776,6 @@ export function calculateAuditScores(issues: AuditIssue[]): {
   });
 
   const overallScore = activeCategories > 0 ? Math.round(totalScore / activeCategories) : 100;
-  return { overallScore, categories: result };
+  const verdict = calculateReadinessVerdict(issues);
+  return { overallScore, categories: result, verdict };
 }

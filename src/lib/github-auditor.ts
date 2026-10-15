@@ -296,7 +296,7 @@ README excerpt: ${readme ? readme.substring(0, 1500) : 'None'}
   });
 
   const allIssues = [...issues, ...aiResult.additionalIssues];
-  const { overallScore, categories } = calculateAuditScores(allIssues);
+  const { overallScore, categories, verdict } = calculateAuditScores(allIssues);
 
   const responseTimeMs = Date.now() - startTime;
 
@@ -313,6 +313,7 @@ README excerpt: ${readme ? readme.substring(0, 1500) : 'None'}
       resourceSizeKb: Math.round(((readme?.length || 0) + (packageJson?.length || 0)) / 1024),
     },
     overallScore,
+    verdict,
     categories,
     summary:
       aiResult.summary ||
