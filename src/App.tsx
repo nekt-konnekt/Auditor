@@ -75,7 +75,13 @@ export default function App() {
     });
   };
 
+  const clearRescanState = () => {
+    setRescanDiff(null);
+    setRescanError(null);
+  };
+
   const fetchReportById = async (id: string) => {
+    clearRescanState();
     setIsLoading(true);
     try {
       const res = await fetch(`/api/report/${id}`);
@@ -124,6 +130,7 @@ export default function App() {
   };
 
   const handleStartAudit = async (payload: AuditRequestPayload) => {
+    clearRescanState();
     setIsLoading(true);
     try {
       const response = await fetch('/api/audit', {
@@ -155,6 +162,7 @@ export default function App() {
   };
 
   const handleOpenLeads = async () => {
+    clearRescanState();
     setCurrentView('leads');
     setActiveReport(null);
     setLeadLoading(true);
@@ -185,7 +193,7 @@ export default function App() {
       ? 'A public asset appears to expose a credential-like value. The value is intentionally not reproduced here; rotate the affected key and remove it from client-delivered code.'
       : worst ? worst.title + ': ' + worst.remediation : 'The audit found opportunities to improve launch readiness.';
     const dm = 'Hi! I ran a passive check of ' + lead.targetValue + ' using public pages only. One finding worth reviewing: ' + finding + ' I did not attempt login or access private systems. Full report: ' + reportUrl;
-    const email = 'Subject: A launch-readiness finding for ' + lead.targetValue + '\n\nHi,\n\nI ran a passive, external check of ' + lead.targetValue + ' using publicly accessible pages only. I did not attempt to log in, exploit anything, or access private systems.\\n\\nThe most important finding is: ' + finding + '\n\nSuggested next step: ' + (exposedSecret ? 'rotate the affected credential, remove it from public assets, and verify the deployed build no longer exposes it.' : (worst?.remediation || 'review the report and prioritize the highest-severity items.')) + '\\n\\nFull report: ' + reportUrl + '\n\nIf useful, I can share the specific check and help verify the fix.\n\nRegards';
+    const email = 'Subject: A launch-readiness finding for ' + lead.targetValue + '\n\nHi,\n\nI ran a passive, external check of ' + lead.targetValue + ' using publicly accessible pages only. I did not attempt to log in, exploit anything, or access private systems.\n\nThe most important finding is: ' + finding + '\n\nSuggested next step: ' + (exposedSecret ? 'rotate the affected credential, remove it from public assets, and verify the deployed build no longer exposes it.' : (worst?.remediation || 'review the report and prioritize the highest-severity items.')) + '\n\nFull report: ' + reportUrl + '\n\nIf useful, I can share the specific check and help verify the fix.\n\nRegards';
     setOutreachDrafts((current) => ({ ...current, [lead.auditId]: { dm, email } }));
   };
 
@@ -244,6 +252,7 @@ export default function App() {
   };
 
   const handleNewAudit = () => {
+    clearRescanState();
     setCurrentView('form');
     // Clear URL query
     const url = new URL(window.location.href);
@@ -253,6 +262,7 @@ export default function App() {
   };
 
   const handleSelectHistoryReport = (report: AuditReport) => {
+    clearRescanState();
     setActiveReport(report);
     setCurrentView('report');
     const url = new URL(window.location.href);
@@ -287,7 +297,7 @@ export default function App() {
       <Navbar
         onNewAudit={handleNewAudit}
         onOpenHistory={() => setIsHistoryModalOpen(true)}
-        onOpenBatch={() => { setCurrentView('batch'); setActiveReport(null); }}
+        onOpenBatch={() => { clearRescanState(); setCurrentView('batch'); setActiveReport(null); }}
         onOpenLeads={handleOpenLeads}
         historyCount={historyReports.length}
         currentView={currentView}
@@ -305,7 +315,7 @@ export default function App() {
             {leadLoading ? <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-slate-500">Loading persisted leads…</div> : leads.filter((lead) => (leadFilter === 'all' || lead.status === leadFilter) && (sourceFilter === 'all' || (lead.sourceNote || 'Unspecified') === sourceFilter)).length === 0 ? <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-slate-600">No saved audits match this filter yet. Run a website audit or batch first.</div> : <div className="space-y-4">{leads.filter((lead) => (leadFilter === 'all' || lead.status === leadFilter) && (sourceFilter === 'all' || (lead.sourceNote || 'Unspecified') === sourceFilter)).map((lead) => {
               const worst = lead.report.issues.filter((issue) => issue.severity !== 'passed').sort((a, b) => severityRank[a.severity] - severityRank[b.severity])[0];
               return <article key={lead.auditId} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-                <div className="flex flex-wrap items-start justify-between gap-3 mb-4"><div className="min-w-0"><p className="font-mono text-sm break-all text-slate-800">{lead.targetValue}</p><p className="mt-1 text-xs text-slate-500">Audited {new Date(lead.createdAt).toLocaleString()} · Score {lead.overallScore} · {lead.verdict}</p><p className="mt-2 text-sm text-slate-700"><span className="font-semibold">Top finding:</span> {worst?.title || 'No failing findings'}</p></div><button onClick={() => { setActiveReport(lead.report); setCurrentView('report'); const url = new URL(window.location.href); url.searchParams.set('auditId', lead.auditId); window.history.pushState({}, '', url.toString()); }} className="text-sm font-semibold text-emerald-700 underline underline-offset-2">Open report</button></div>
+                <div className="flex flex-wrap items-start justify-between gap-3 mb-4"><div className="min-w-0"><p className="font-mono text-sm break-all text-slate-800">{lead.targetValue}</p><p className="mt-1 text-xs text-slate-500">Audited {new Date(lead.createdAt).toLocaleString()} · Score {lead.overallScore} · {lead.verdict}</p><p className="mt-2 text-sm text-slate-700"><span className="font-semibold">Top finding:</span> {worst?.title || 'No failing findings'}</p></div><button onClick={() => { clearRescanState(); setActiveReport(lead.report); setCurrentView('report'); const url = new URL(window.location.href); url.searchParams.set('auditId', lead.auditId); window.history.pushState({}, '', url.toString()); }} className="text-sm font-semibold text-emerald-700 underline underline-offset-2">Open report</button></div>
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
                   <div><label className="block text-xs font-semibold text-slate-600 mb-1">Outreach status</label><select value={lead.status} onChange={(event) => updateLeadField(lead.auditId, 'status', event.target.value)} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"><option>Not contacted</option><option>Contacted</option><option>Replied</option><option>Interested in monitoring</option><option>Not interested</option></select></div>
                   <div><label className="block text-xs font-semibold text-slate-600 mb-1">Owner handle / email</label><input value={lead.ownerContact} onChange={(event) => updateLeadField(lead.auditId, 'ownerContact', event.target.value)} maxLength={320} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Contact details" /></div>
@@ -333,7 +343,7 @@ export default function App() {
               {batchError && <p role="alert" className="mt-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">{batchError}</p>}
               <div className="mt-5 flex flex-wrap items-center gap-3"><button onClick={handleRunBatch} disabled={batchLoading} className="rounded-lg bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60">{batchLoading ? 'Running batch…' : 'Run batch audit'}</button>{batchLoading && <span className="text-sm text-slate-500">Limited concurrency is enabled. Results appear when the batch completes.</span>}</div>
             </div>
-            {batchResults.length > 0 && <div className="mt-8 bg-white border border-slate-200 rounded-xl overflow-hidden"><div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between gap-4"><h2 className="font-bold text-slate-900">Batch results</h2><span className="text-sm text-slate-500">{batchResults.filter((item) => item.report).length} of {batchResults.length} completed</span></div><div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-5 py-3">URL</th><th className="px-5 py-3">Verdict</th><th className="px-5 py-3">Score</th><th className="px-5 py-3">Worst finding</th><th className="px-5 py-3">Status</th></tr></thead><tbody className="divide-y divide-slate-100">{[...batchResults].sort((a, b) => { const rank = (item: typeof a) => item.report?.verdict === 'Not ready' ? 0 : item.report?.verdict === 'Risky' ? 1 : item.report?.verdict === 'Ready' ? 2 : 3; return rank(a) - rank(b) || a.index - b.index; }).map((item) => { const worst = item.report?.issues.filter((issue) => issue.severity !== 'passed').sort((a, b) => severityRank[a.severity] - severityRank[b.severity])[0]; return <tr key={item.index} className="align-top"><td className="px-5 py-4 max-w-xs break-all font-mono text-xs">{item.target}</td><td className="px-5 py-4 font-semibold">{item.report?.verdict || '—'}</td><td className="px-5 py-4 tabular-nums">{item.report ? item.report.overallScore : '—'}</td><td className="px-5 py-4">{worst?.title || (item.report ? 'No failing findings' : item.error || 'Audit failed')}</td><td className="px-5 py-4"><span className={item.report ? 'text-emerald-700' : 'text-rose-700'}>{item.report ? 'Complete' : 'Failed'}</span>{item.report && <button onClick={() => { setActiveReport(item.report!); setCurrentView('report'); const url = new URL(window.location.href); url.searchParams.set('auditId', item.report!.id); window.history.pushState({}, '', url.toString()); }} className="ml-3 text-emerald-700 underline underline-offset-2">Open report</button>}</td></tr>; })}</tbody></table></div></div>}
+            {batchResults.length > 0 && <div className="mt-8 bg-white border border-slate-200 rounded-xl overflow-hidden"><div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between gap-4"><h2 className="font-bold text-slate-900">Batch results</h2><span className="text-sm text-slate-500">{batchResults.filter((item) => item.report).length} of {batchResults.length} completed</span></div><div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-5 py-3">URL</th><th className="px-5 py-3">Verdict</th><th className="px-5 py-3">Score</th><th className="px-5 py-3">Worst finding</th><th className="px-5 py-3">Status</th></tr></thead><tbody className="divide-y divide-slate-100">{[...batchResults].sort((a, b) => { const rank = (item: typeof a) => item.report?.verdict === 'Not ready' ? 0 : item.report?.verdict === 'Risky' ? 1 : item.report?.verdict === 'Ready' ? 2 : 3; return rank(a) - rank(b) || a.index - b.index; }).map((item) => { const worst = item.report?.issues.filter((issue) => issue.severity !== 'passed').sort((a, b) => severityRank[a.severity] - severityRank[b.severity])[0]; return <tr key={item.index} className="align-top"><td className="px-5 py-4 max-w-xs break-all font-mono text-xs">{item.target}</td><td className="px-5 py-4 font-semibold">{item.report?.verdict || '—'}</td><td className="px-5 py-4 tabular-nums">{item.report ? item.report.overallScore : '—'}</td><td className="px-5 py-4">{worst?.title || (item.report ? 'No failing findings' : item.error || 'Audit failed')}</td><td className="px-5 py-4"><span className={item.report ? 'text-emerald-700' : 'text-rose-700'}>{item.report ? 'Complete' : 'Failed'}</span>{item.report && <button onClick={() => { clearRescanState(); setActiveReport(item.report!); setCurrentView('report'); const url = new URL(window.location.href); url.searchParams.set('auditId', item.report!.id); window.history.pushState({}, '', url.toString()); }} className="ml-3 text-emerald-700 underline underline-offset-2">Open report</button>}</td></tr>; })}</tbody></table></div></div>}
           </section>
         ) : currentView === 'form' || !activeReport ? (
           <AuditForm onStartAudit={handleStartAudit} isLoading={isLoading} />
