@@ -57,7 +57,13 @@ export async function discoverAdditionalRoutes(
 
   // Robots is fetched as a same-origin, size-limited resource. If it cannot be
   // read reliably, do not expand the crawl beyond the submitted page.
-  const robots = await fetchPublicResource(new URL('/robots.txt', homepageUrl).toString(), homepageUrl.origin);
+  let robots: Awaited<ReturnType<typeof fetchPublicResource>> = null;
+  try {
+    // No redirects here: the route crawl has a strict four-request expansion budget.
+    robots = await fetchPublicResource(new URL('/robots.txt', homepageUrl).toString(), homepageUrl.origin, 6_000, 0);
+  } catch {
+    return [];
+  }
   if (!robots || (robots.status >= 500) || (robots.status >= 200 && robots.status < 300 && !robots.contentType.toLowerCase().includes('text/plain') && robots.body.length === 0)) {
     return [];
   }
@@ -101,7 +107,7 @@ export async function crawlAdditionalRoutes(homepageUrl: URL, homepageHtml: stri
     attempted += 1;
     const start = Date.now();
     try {
-      const { url, response, html } = await fetchPublicPage(candidate.toString(), 8_000);
+      const { url, response, html } = await fetchPublicPage(candidate.toString(), 8_000, 0);
       const headers: Record<string, string> = {};
       response.headers.forEach((value, key) => { headers[key.toLowerCase()] = value; });
       routes.push({ url, statusCode: response.status, headers, html, responseTimeMs: Date.now() - start });
