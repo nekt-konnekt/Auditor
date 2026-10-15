@@ -3,14 +3,18 @@ import React from 'react';
 interface NavbarProps {
   onNewAudit: () => void;
   onOpenHistory: () => void;
+  onOpenBatch: () => void;
+  onOpenLeads: () => void;
   historyCount: number;
-  currentView: 'form' | 'report';
+  currentView: 'form' | 'report' | 'batch' | 'leads';
   onNavigateHome: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
   onNewAudit,
   onOpenHistory,
+  onOpenBatch,
+  onOpenLeads,
   historyCount,
   currentView,
   onNavigateHome,
@@ -42,6 +46,18 @@ export const Navbar: React.FC<NavbarProps> = ({
             }`}
           >
             Audit Workspace
+          </button>
+          <button
+            onClick={onOpenBatch}
+            className={`hover:text-slate-900 transition-colors whitespace-nowrap shrink-0 ${currentView === 'batch' ? 'text-slate-900 font-semibold' : ''}`}
+          >
+            Batch Audit
+          </button>
+          <button
+            onClick={onOpenLeads}
+            className={`hover:text-slate-900 transition-colors whitespace-nowrap shrink-0 ${currentView === 'leads' ? 'text-slate-900 font-semibold' : ''}`}
+          >
+            Lead Tracker
           </button>
           <button
             onClick={onOpenHistory}
