@@ -5,12 +5,16 @@ interface ReportDashboardProps {
   report: AuditReport;
   onBackToStudio: () => void;
   onOpenMarkdown: () => void;
+  onRescan?: () => void;
+  rescanLoading?: boolean;
 }
 
 export const ReportDashboard: React.FC<ReportDashboardProps> = ({
   report,
   onBackToStudio,
   onOpenMarkdown,
+  onRescan,
+  rescanLoading = false,
 }) => {
   const [selectedSeverity, setSelectedSeverity] = useState<string>('all');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -144,7 +148,8 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
         </div>
 
         {/* Action Controls */}
-        <div className="flex items-center gap-2.5 shrink-0">
+        <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+          {report.target.type === 'url' && onRescan && <button onClick={onRescan} disabled={rescanLoading} className="px-3.5 py-2 text-xs font-semibold text-white bg-emerald-700 hover:bg-emerald-800 rounded-lg disabled:opacity-60">{rescanLoading ? 'Re-scanning…' : 'Re-scan & compare'}</button>}
           <button
             onClick={handleShareLink}
             className="px-3.5 py-2 text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg shadow-2xs transition-colors"
