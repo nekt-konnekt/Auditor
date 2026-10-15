@@ -32,7 +32,7 @@ app.use((req, res, next) => {
   const password = process.env.AUDITOR_PASSWORD;
   if (!username || !password) return res.status(503).send('Auditor access is not configured.');
 
-  const match = /^Basic\\s+([A-Za-z0-9+/=]+)$/i.exec(req.headers.authorization || '');
+  const match = /^Basic\s+([A-Za-z0-9+/=]+)$/i.exec(req.headers.authorization || '');
   if (!match) {
     res.setHeader('WWW-Authenticate', 'Basic realm="Auditor Internal", charset="UTF-8"');
     return res.status(401).send('Authentication required.');
