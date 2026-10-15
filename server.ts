@@ -86,6 +86,34 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', time: new Date().toISOString() });
 });
 
+app.post('/api/audit/batch', async (req, res) => {
+  const targets = req.body?.targets;
+  if (!Array.isArray(targets) || targets.length < 1 || targets.length > 5) {
+    return res.status(400).json({ error: 'Provide between 1 and 5 audit targets.' });
+  }
+  if (targets.some((item) => !item || typeof item.target !== 'string' || !item.target.trim())) {
+    return res.status(400).json({ error: 'Each batch item must include a target URL.' });
+  }
+
+  const results: Array<{ index: number; target: string; report?: unknown; error?: string }> = [];
+  let nextIndex = 0;
+  const worker = async () => {
+    while (true) {
+      const index = nextIndex++;
+      if (index >= targets.length) return;
+      const item = targets[index];
+      try {
+        const report = await executeAudit({ type: 'url', target: item.target.trim() });
+        results[index] = { index, target: item.target, report };
+      } catch (error: unknown) {
+        results[index] = { index, target: item.target, error: error instanceof Error ? error.message : 'Audit failed.' };
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(2, targets.length) }, () => worker()));
+  return res.json({ total: targets.length, completed: results.filter((item) => item.report).length, results });
+});
+
 app.post('/api/audit', async (req, res) => {
   try {
     const { type, target, code, language, filename } = req.body ?? {};
