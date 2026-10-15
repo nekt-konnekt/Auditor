@@ -51,9 +51,10 @@ export async function discoverAdditionalRoutes(
   homepageUrl: URL,
   homepageHtml: string,
   maxRoutes = MAX_ADDITIONAL_ROUTES,
+  onRobotsStatus?: (status: 'checked' | 'unavailable') => void,
 ): Promise<URL[]> {
   const boundedLimit = Math.max(0, Math.min(MAX_ADDITIONAL_ROUTES, Math.floor(maxRoutes)));
-  if (boundedLimit === 0) return [];
+  if (boundedLimit === 0) { onRobotsStatus?.('unavailable'); return []; }
 
   // Robots is fetched as a same-origin, size-limited resource. If it cannot be
   // read reliably, do not expand the crawl beyond the submitted page.
@@ -62,11 +63,14 @@ export async function discoverAdditionalRoutes(
     // No redirects here: the route crawl has a strict four-request expansion budget.
     robots = await fetchPublicResource(new URL('/robots.txt', homepageUrl).toString(), homepageUrl.origin, 6_000, 0);
   } catch {
+    onRobotsStatus?.('unavailable');
     return [];
   }
   if (!robots || (robots.status >= 500) || (robots.status >= 200 && robots.status < 300 && !robots.contentType.toLowerCase().includes('text/plain') && robots.body.length === 0)) {
+    onRobotsStatus?.('unavailable');
     return [];
   }
+  onRobotsStatus?.('checked');
   const disallowRules = robots.status >= 200 && robots.status < 300
     ? parseRobotsDisallowRules(robots.body)
     : [];
@@ -99,8 +103,10 @@ export async function crawlAdditionalRoutes(homepageUrl: URL, homepageHtml: stri
   routes: CrawledRoute[];
   attempted: number;
   skippedByRobots: number;
+  robotsStatus: 'checked' | 'unavailable';
 }> {
-  const candidates = await discoverAdditionalRoutes(homepageUrl, homepageHtml);
+  let robotsStatus: 'checked' | 'unavailable' = 'unavailable';
+  const candidates = await discoverAdditionalRoutes(homepageUrl, homepageHtml, MAX_ADDITIONAL_ROUTES, (status) => { robotsStatus = status; });
   const routes: CrawledRoute[] = [];
   let attempted = 0;
   for (const candidate of candidates) {
@@ -115,5 +121,5 @@ export async function crawlAdditionalRoutes(homepageUrl: URL, homepageHtml: stri
       // One inaccessible route must not fail the submitted site's audit.
     }
   }
-  return { routes, attempted, skippedByRobots: 0 };
+  return { routes, attempted, skippedByRobots: 0, robotsStatus };
 }
