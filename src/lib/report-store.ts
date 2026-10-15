@@ -16,12 +16,12 @@ const SECRET_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
 export function redactSensitiveText(value: string): string {
   let redacted = value;
   for (const { pattern, label } of SECRET_PATTERNS) {
-    redacted = redacted.replace(pattern, (match) => `[REDACTED ${label}: ${match.slice(0, 4)}…]`);
+    redacted = redacted.replace(pattern, () => `[REDACTED ${label}]`);
   }
   // Redact values assigned to common secret-bearing variable names, retaining only a 4-char prefix.
   redacted = redacted.replace(
     /((?:api[_-]?key|secret|password|token|service_role|private[_-]?key)\s*[:=]\s*["']?)([A-Za-z0-9_./+=-]{16,})/gi,
-    (_match, prefix: string, secret: string) => `${prefix}[REDACTED: ${secret.slice(0, 4)}…]`,
+    (_match, prefix: string) => `${prefix}[REDACTED]`,
   );
   return redacted;
 }
