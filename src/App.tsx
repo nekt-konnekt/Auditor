@@ -30,6 +30,9 @@ export default function App() {
   const [metrics, setMetrics] = useState<{ totalAudits: number; verdicts: Record<string, number>; messagesSent: number; replies: number; interested: number } | null>(null);
   const [outreachDrafts, setOutreachDrafts] = useState<Record<string, { dm: string; email: string }>>({});
   const [copiedOutreach, setCopiedOutreach] = useState<string | null>(null);
+  const [rescanLoading, setRescanLoading] = useState(false);
+  const [rescanError, setRescanError] = useState<string | null>(null);
+  const [rescanDiff, setRescanDiff] = useState<{ target: string; scoreDelta: number; previousVerdict: string; currentVerdict: string; addedFindings: Array<{ title: string; severity: string }>; resolvedFindings: Array<{ title: string; severity: string }>; unchangedFindingCount: number } | null>(null);
   const [activeReport, setActiveReport] = useState<AuditReport | null>(null);
   const [historyReports, setHistoryReports] = useState<AuditReport[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -85,6 +88,37 @@ export default function App() {
       console.warn('Failed to load shared report:', err);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleRescan = async () => {
+    if (!activeReport || activeReport.target.type !== 'url') return;
+    setRescanLoading(true);
+    setRescanError(null);
+    setRescanDiff(null);
+    const previousReport = activeReport;
+    try {
+      const response = await fetch('/api/audit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'url', target: previousReport.target.target }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Re-scan failed.');
+      const nextReport = data as AuditReport;
+      const compareResponse = await fetch(`/api/report/${encodeURIComponent(nextReport.id)}/compare/${encodeURIComponent(previousReport.id)}`);
+      const compareData = await compareResponse.json().catch(() => ({}));
+      if (!compareResponse.ok) throw new Error(compareData.error || 'Re-scan completed, but the comparison could not be loaded.');
+      setRescanDiff(compareData);
+      setActiveReport(nextReport);
+      saveReportToHistory(nextReport);
+      const url = new URL(window.location.href);
+      url.searchParams.set('auditId', nextReport.id);
+      window.history.pushState({}, '', url.toString());
+    } catch (error) {
+      setRescanError(error instanceof Error ? error.message : 'Re-scan failed.');
+    } finally {
+      setRescanLoading(false);
     }
   };
 
@@ -306,7 +340,11 @@ export default function App() {
             report={activeReport}
             onBackToStudio={handleNewAudit}
             onOpenMarkdown={() => setIsMarkdownModalOpen(true)}
+            onRescan={handleRescan}
+            rescanLoading={rescanLoading}
           />
+          {rescanError && <p role="alert" className="mx-4 mb-5 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">{rescanError}</p>}
+          {rescanDiff && <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-10"><div className="rounded-xl border border-slate-200 bg-white p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-xl font-bold">Re-scan comparison</h2><p className="mt-1 text-sm text-slate-600">{rescanDiff.target}</p></div><p className="text-sm font-semibold">Score change: {rescanDiff.scoreDelta > 0 ? '+' : ''}{rescanDiff.scoreDelta}</p></div><p className="mt-3 text-sm">Verdict: {rescanDiff.previousVerdict} → <strong>{rescanDiff.currentVerdict}</strong> · {rescanDiff.unchangedFindingCount} unchanged finding(s)</p><div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4"><div className="rounded-lg bg-rose-50 p-4"><h3 className="font-semibold text-rose-900">New findings ({rescanDiff.addedFindings.length})</h3>{rescanDiff.addedFindings.length ? <ul className="mt-2 list-disc pl-5 text-sm text-rose-900">{rescanDiff.addedFindings.map((item, index) => <li key={item.title + index}>{item.severity.toUpperCase()}: {item.title}</li>)}</ul> : <p className="mt-2 text-sm text-rose-800">No new findings.</p>}</div><div className="rounded-lg bg-emerald-50 p-4"><h3 className="font-semibold text-emerald-900">Resolved findings ({rescanDiff.resolvedFindings.length})</h3>{rescanDiff.resolvedFindings.length ? <ul className="mt-2 list-disc pl-5 text-sm text-emerald-900">{rescanDiff.resolvedFindings.map((item, index) => <li key={item.title + index}>{item.severity.toUpperCase()}: {item.title}</li>)}</ul> : <p className="mt-2 text-sm text-emerald-800">No previously recorded findings were resolved.</p>}</div></div></div></section>}
         )}
       </main>
 
