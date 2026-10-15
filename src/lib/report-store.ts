@@ -92,3 +92,130 @@ export async function loadAuditReport(id: string): Promise<AuditReport | null> {
   if (!rows.length) return null;
   return sanitizeAuditReport(rows[0].report as AuditReport);
 }
+
+
+export type LeadStatus = 'Not contacted' | 'Contacted' | 'Replied' | 'Interested in monitoring' | 'Not interested';
+
+export interface LeadRecord {
+  auditId: string;
+  status: LeadStatus;
+  ownerContact: string;
+  sourceNote: string;
+  contactChannel: string;
+  notes: string;
+  updatedAt: string;
+  createdAt: string;
+  targetValue: string;
+  targetType: 'url' | 'code';
+  verdict: string;
+  overallScore: number;
+  hasExposureFinding: boolean;
+  report: AuditReport;
+}
+
+export async function listAuditLeads(): Promise<LeadRecord[]> {
+  ensureDatabaseConfigured();
+  if (!sql) return [];
+  const rows = await sql`
+    SELECT r.id AS audit_id, r.created_at, r.target_value, r.target_type,
+           r.verdict, r.overall_score, r.has_exposure_finding, r.report,
+           COALESCE(l.status, 'Not contacted') AS status,
+           COALESCE(l.owner_contact, '') AS owner_contact,
+           COALESCE(l.source_note, '') AS source_note,
+           COALESCE(l.contact_channel, '') AS contact_channel,
+           COALESCE(l.notes, '') AS notes,
+           COALESCE(l.updated_at, r.created_at) AS updated_at
+    FROM audit_reports r
+    LEFT JOIN audit_leads l ON l.audit_id = r.id
+    ORDER BY r.created_at DESC
+    LIMIT 200
+  `;
+  return rows.map((row) => ({
+    auditId: String(row.audit_id),
+    status: row.status as LeadStatus,
+    ownerContact: String(row.owner_contact || ''),
+    sourceNote: String(row.source_note || ''),
+    contactChannel: String(row.contact_channel || ''),
+    notes: String(row.notes || ''),
+    updatedAt: new Date(row.updated_at as string).toISOString(),
+    createdAt: new Date(row.created_at as string).toISOString(),
+    targetValue: String(row.target_value),
+    targetType: row.target_type as 'url' | 'code',
+    verdict: String(row.verdict),
+    overallScore: Number(row.overall_score),
+    hasExposureFinding: Boolean(row.has_exposure_finding),
+    report: sanitizeAuditReport(row.report as AuditReport),
+  }));
+}
+
+export async function upsertAuditLead(auditId: string, lead: {
+  status: LeadStatus;
+  ownerContact: string;
+  sourceNote: string;
+  contactChannel: string;
+  notes: string;
+}): Promise<boolean> {
+  ensureDatabaseConfigured();
+  if (!sql) return false;
+  const rows = await sql`SELECT id FROM audit_reports WHERE id = ${auditId} LIMIT 1`;
+  if (!rows.length) return false;
+  await sql`
+    INSERT INTO audit_leads
+      (audit_id, status, owner_contact, source_note, contact_channel, notes, updated_at)
+    VALUES
+      (${auditId}, ${lead.status}, ${lead.ownerContact}, ${lead.sourceNote},
+       ${lead.contactChannel}, ${lead.notes}, now())
+    ON CONFLICT (audit_id) DO UPDATE SET
+      status = EXCLUDED.status,
+      owner_contact = EXCLUDED.owner_contact,
+      source_note = EXCLUDED.source_note,
+      contact_channel = EXCLUDED.contact_channel,
+      notes = EXCLUDED.notes,
+      updated_at = now()
+  `;
+  return true;
+}
+
+export async function getAuditValidationMetrics(): Promise<{
+  totalAudits: number;
+  verdicts: Record<string, number>;
+  messagesSent: number;
+  replies: number;
+  interested: number;
+  sourceBreakdown: Array<{ sourceNote: string; audits: number; contacted: number; replies: number; interested: number }>;
+}> {
+  ensureDatabaseConfigured();
+  if (!sql) return { totalAudits: 0, verdicts: {}, messagesSent: 0, replies: 0, interested: 0, sourceBreakdown: [] };
+  const rows = await sql`
+    SELECT r.verdict,
+           COALESCE(l.status, 'Not contacted') AS status,
+           COALESCE(l.source_note, '') AS source_note,
+           COUNT(*)::int AS total
+    FROM audit_reports r
+    LEFT JOIN audit_leads l ON l.audit_id = r.id
+    GROUP BY r.verdict, COALESCE(l.status, 'Not contacted'), COALESCE(l.source_note, '')
+  `;
+  const verdicts: Record<string, number> = {};
+  const sources = new Map<string, { audits: number; contacted: number; replies: number; interested: number }>();
+  let totalAudits = 0, messagesSent = 0, replies = 0, interested = 0;
+  for (const row of rows) {
+    const count = Number(row.total);
+    totalAudits += count;
+    verdicts[String(row.verdict)] = (verdicts[String(row.verdict)] || 0) + count;
+    const status = String(row.status);
+    if (status !== 'Not contacted') messagesSent += count;
+    if (status === 'Replied' || status === 'Interested in monitoring') replies += count;
+    if (status === 'Interested in monitoring') interested += count;
+    const sourceNote = String(row.source_note || 'Unspecified');
+    const source = sources.get(sourceNote) || { audits: 0, contacted: 0, replies: 0, interested: 0 };
+    source.audits += count;
+    if (status !== 'Not contacted') source.contacted += count;
+    if (status === 'Replied' || status === 'Interested in monitoring') source.replies += count;
+    if (status === 'Interested in monitoring') source.interested += count;
+    sources.set(sourceNote, source);
+  }
+  return {
+    totalAudits, verdicts, messagesSent, replies, interested,
+    sourceBreakdown: [...sources.entries()].map(([sourceNote, values]) => ({ sourceNote, ...values })),
+  };
+}
