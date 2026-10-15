@@ -4,7 +4,7 @@
 CREATE TABLE IF NOT EXISTS audit_reports (
   id text PRIMARY KEY,
   created_at timestamptz NOT NULL,
-  target_url text NOT NULL,
+  target_value text NOT NULL,
   target_type text NOT NULL CHECK (target_type IN ('url', 'code')),
   verdict text NOT NULL CHECK (verdict IN ('Ready', 'Risky', 'Not ready')),
   overall_score integer NOT NULL CHECK (overall_score BETWEEN 0 AND 100),
@@ -16,8 +16,8 @@ CREATE TABLE IF NOT EXISTS audit_reports (
 
 CREATE INDEX IF NOT EXISTS audit_reports_created_at_idx
   ON audit_reports (created_at DESC);
-CREATE INDEX IF NOT EXISTS audit_reports_target_url_idx
-  ON audit_reports (target_url);
+CREATE INDEX IF NOT EXISTS audit_reports_target_value_idx
+  ON audit_reports (target_value);
 CREATE INDEX IF NOT EXISTS audit_reports_verdict_idx
   ON audit_reports (verdict);
 
