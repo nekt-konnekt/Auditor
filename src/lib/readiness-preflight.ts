@@ -33,7 +33,7 @@ async function readCertificate(url: URL): Promise<{
   daysRemaining: number;
 } | null> {
   const hostname = url.hostname.replace(/^\[|\]$/g, '');
-  let addresses;
+  let addresses: Awaited<ReturnType<typeof getValidatedPublicAddresses>>;
   try {
     addresses = await getValidatedPublicAddresses(url.toString());
   } catch {
