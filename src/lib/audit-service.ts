@@ -8,7 +8,7 @@ import {
 import { analyzeWithGemini } from './gemini-auditor.ts';
 import { auditGitHubRepo, parseGitHubUrl } from './github-auditor.ts';
 import { fetchPublicPage } from './safe-fetch.ts';
-import { loadAuditReport, persistAuditReport, sanitizeAuditReport } from './report-store.ts';
+import { loadAuditReport, persistAuditReport, redactSensitiveText, sanitizeAuditReport } from './report-store.ts';
 
 // In-memory cache is intentionally bounded. Durable shared links require a database.
 const reportsStore = new Map<string, AuditReport>();
@@ -68,7 +68,7 @@ export async function executeAudit(payload: AuditRequestPayload): Promise<AuditR
     // Error pages are useful to inspect, but AI analysis can mistake their markup
     // for the intended page. Keep these reports deterministic and label their limits.
     const aiResult = response.ok
-      ? await analyzeWithGemini('url', url.toString(), html, {
+      ? await analyzeWithGemini('url', url.toString(), redactSensitiveText(html), {
           statusCode: response.status,
           responseTimeMs,
           headers: headersMap,
@@ -111,7 +111,7 @@ export async function executeAudit(payload: AuditRequestPayload): Promise<AuditR
   if (code.length > 200_000) throw new Error('Source code is limited to 200,000 characters per audit.');
 
   const { issues: deterministicIssues, metrics } = runCodeDeterministicAudit({ code, language, filename });
-  const aiResult = await analyzeWithGemini('code', filename, code, { language, filename });
+  const aiResult = await analyzeWithGemini('code', filename, redactSensitiveText(code), { language, filename });
   const allIssues = [...deterministicIssues, ...aiResult.additionalIssues];
   const { overallScore, categories, verdict } = calculateAuditScores(allIssues);
   const report: AuditReport = {
