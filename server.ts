@@ -151,6 +151,7 @@ app.post('/api/audit', async (req, res) => {
 });
 
 app.get('/api/report/:id/compare/:previousId', async (req, res) => {
+  try {
   const current = await getReportById(req.params.id);
   const previous = await getReportById(req.params.previousId);
   if (!current || !previous) return res.status(404).json({ error: 'Both reports must exist to compare them.' });
@@ -176,23 +177,37 @@ app.get('/api/report/:id/compare/:previousId', async (req, res) => {
     resolvedFindings: resolved,
     unchangedFindingCount: current.issues.length - added.length,
   });
+  } catch (error) {
+    console.error('Report comparison failed:', error instanceof Error ? error.message : 'Unknown error');
+    return res.status(500).json({ error: 'Unable to compare reports right now.' });
+  }
 });
 
 app.get('/api/report/:id', async (req, res) => {
-  const report = await getReportById(req.params.id);
-  if (!report) return res.status(404).json({ error: 'Report not found or expired.' });
-  return res.json(report);
+  try {
+    const report = await getReportById(req.params.id);
+    if (!report) return res.status(404).json({ error: 'Report not found or expired.' });
+    return res.json(report);
+  } catch (error) {
+    console.error('Report retrieval failed:', error instanceof Error ? error.message : 'Unknown error');
+    return res.status(500).json({ error: 'Unable to retrieve report right now.' });
+  }
 });
 
 app.get('/api/report/:id/md', async (req, res) => {
-  const report = await getReportById(req.params.id);
-  if (!report) return res.status(404).send('# Error: Report not found or expired.');
-  const markdown = generateAuditMarkdown(report);
-  if (req.query.download === 'true') {
-    res.setHeader('Content-Disposition', `attachment; filename="audit-${report.id}.md"`);
+  try {
+    const report = await getReportById(req.params.id);
+    if (!report) return res.status(404).send('# Error: Report not found or expired.');
+    const markdown = generateAuditMarkdown(report);
+    if (req.query.download === 'true') {
+      res.setHeader('Content-Disposition', `attachment; filename="audit-${report.id}.md"`);
+    }
+    res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+    return res.send(markdown);
+  } catch (error) {
+    console.error('Markdown report export failed:', error instanceof Error ? error.message : 'Unknown error');
+    return res.status(500).send('# Error: Unable to export report right now.');
   }
-  res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
-  return res.send(markdown);
 });
 
 async function startServer() {
