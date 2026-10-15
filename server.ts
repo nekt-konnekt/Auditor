@@ -38,7 +38,7 @@ function internalAuth(req: express.Request, res: express.Response, next: express
   }
 
   const header = req.headers.authorization || '';
-  const match = /^Basic\\s+([A-Za-z0-9+/=]+)$/i.exec(header);
+  const match = /^Basic\s+([A-Za-z0-9+/=]+)$/i.exec(header);
   if (!match) {
     res.setHeader('WWW-Authenticate', 'Basic realm="Auditor Internal", charset="UTF-8"');
     return res.status(401).send('Authentication required.');
