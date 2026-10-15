@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { detectPlatform } from '../src/lib/platform-detection.ts';
+import { detectPlatform, getPlatformGuidance } from '../src/lib/platform-detection.ts';
 
 test('detects platform signals from public markup and headers', () => {
   const result = detectPlatform(
@@ -14,4 +14,11 @@ test('detects platform signals from public markup and headers', () => {
 
 test('does not infer a platform when no known signals are present', () => {
   assert.deepEqual(detectPlatform({ 'content-type': 'text/html' }, '<html><body>Hello</body></html>').platforms, []);
+});
+
+test('platform guidance returns actionable remediation for detected technologies', () => {
+  const guidance = getPlatformGuidance(['Next.js', 'Cloudflare', 'Unknown Platform']);
+  assert.equal(guidance.length, 2);
+  assert.ok(guidance.some((item) => item.includes('server-side')));
+  assert.ok(guidance.some((item) => item.includes('WAF')));
 });
