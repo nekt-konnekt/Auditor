@@ -145,7 +145,7 @@ export async function executeAudit(payload: AuditRequestPayload): Promise<AuditR
       categories,
       summary: aiResult.summary,
       issues: allIssues,
-      metrics: { ...preflight.metrics, ...metrics, ...exposureResult.metrics, 'Route Coverage': `${routeCrawl.routes.length + 1} page(s) audited (submitted page plus ${routeCrawl.routes.length} additional routes)`, 'Additional Routes Attempted': routeCrawl.attempted, 'Additional Route Budget': MAX_ADDITIONAL_ROUTES, 'Robots.txt': 'Checked before discovering additional same-origin routes', 'Browser Runtime Checks': 'Not performed', 'Detected Platforms': platformSignals.platforms.join(', ') || 'No reliable fingerprint detected' },
+      metrics: { ...preflight.metrics, ...metrics, ...exposureResult.metrics, 'Route Coverage': `${routeCrawl.routes.length + 1} page(s) audited (submitted page plus ${routeCrawl.routes.length} additional routes)`, 'Additional Routes Attempted': routeCrawl.attempted, 'Additional Route Budget': MAX_ADDITIONAL_ROUTES, 'Robots.txt': routeCrawl.robotsStatus === 'checked' ? 'Checked before discovering additional same-origin routes' : 'Unavailable; additional route discovery skipped', 'Browser Runtime Checks': 'Not performed', 'Detected Platforms': platformSignals.platforms.join(', ') || 'No reliable fingerprint detected' },
     };
 
     const safeReport = sanitizeAuditReport(report);
