@@ -74,6 +74,9 @@ export async function persistAuditReport(report: AuditReport): Promise<void> {
        ${safeReport.verdict}, ${safeReport.overallScore}, ${JSON.stringify(safeReport)}::jsonb,
        ${hasExposureFinding}, ${hasExposureFinding})
     ON CONFLICT (id) DO UPDATE SET
+      created_at = EXCLUDED.created_at,
+      target_value = EXCLUDED.target_value,
+      target_type = EXCLUDED.target_type,
       report = EXCLUDED.report,
       verdict = EXCLUDED.verdict,
       overall_score = EXCLUDED.overall_score,
