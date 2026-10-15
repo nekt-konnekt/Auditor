@@ -2,7 +2,7 @@ import { load } from 'cheerio';
 import { fetchPublicPage, fetchPublicResource } from './safe-fetch.ts';
 
 export const MAX_ADDITIONAL_ROUTES = 3;
-const STATIC_ASSET = /\\.(?:avif|bmp|css|csv|gif|ico|jpe?g|js|json|map|pdf|png|svg|txt|webp|woff2?|zip)$/i;
+const STATIC_ASSET = /\.(?:avif|bmp|css|csv|gif|ico|jpe?g|js|json|map|pdf|png|svg|txt|webp|woff2?|zip)$/i;
 
 export interface CrawledRoute {
   url: URL;
@@ -16,7 +16,7 @@ export function parseRobotsDisallowRules(robotsText: string): string[] {
   const rules: string[] = [];
   let appliesToWildcard = false;
   let sawUserAgent = false;
-  for (const rawLine of robotsText.split(/\\r?\\n/)) {
+  for (const rawLine of robotsText.split(/\r?\n/)) {
     const line = rawLine.split('#', 1)[0].trim();
     if (!line) continue;
     const separator = line.indexOf(':');
