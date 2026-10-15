@@ -10,6 +10,7 @@ import { auditGitHubRepo, parseGitHubUrl } from './github-auditor.ts';
 import { fetchPublicPage, validatePublicHttpUrl } from './safe-fetch.ts';
 import { inspectReadinessPreflight } from './readiness-preflight.ts';
 import { scanPublicExposure } from './exposure-scan.ts';
+import { detectPlatform } from './platform-detection.ts';
 import { loadAuditReport, persistAuditReport, redactSensitiveText, sanitizeAuditReport } from './report-store.ts';
 
 // In-memory cache is intentionally bounded. Durable shared links require a database.
@@ -90,6 +91,10 @@ export async function executeAudit(payload: AuditRequestPayload): Promise<AuditR
     });
 
     const exposureResult = await scanPublicExposure(url, html);
+    const platformSignals = detectPlatform(headersMap, html);
+    const platformIssues = platformSignals.platforms.length
+      ? [{ id: 'platform-fingerprint', category: 'quality' as const, severity: 'passed' as const, title: 'Platform Signals Detected', description: 'Auditor identified likely platform or infrastructure signals from public response headers and markup. Fingerprints are indicative, not definitive.', evidence: platformSignals.evidence.join('; '), remediation: 'Use these signals to select platform-specific deployment guidance, and confirm the platform from your hosting configuration.' }]
+      : [];
 
     // Error pages are useful to inspect, but AI analysis can mistake their markup
     // for the intended page. Keep these reports deterministic and label their limits.
@@ -104,7 +109,7 @@ export async function executeAudit(payload: AuditRequestPayload): Promise<AuditR
           additionalIssues: [],
         };
 
-    const allIssues = [...preflight.issues, ...exposureResult.issues, ...deterministicIssues, ...aiResult.additionalIssues];
+    const allIssues = [...preflight.issues, ...exposureResult.issues, ...platformIssues, ...deterministicIssues, ...aiResult.additionalIssues];
     const { overallScore, categories, verdict } = calculateAuditScores(allIssues);
     const report: AuditReport = {
       id: reportId,
@@ -122,7 +127,7 @@ export async function executeAudit(payload: AuditRequestPayload): Promise<AuditR
       categories,
       summary: aiResult.summary,
       issues: allIssues,
-      metrics: { ...preflight.metrics, ...metrics, ...exposureResult.metrics, 'Route Coverage': 'Submitted URL only', 'Browser Runtime Checks': 'Not performed' },
+      metrics: { ...preflight.metrics, ...metrics, ...exposureResult.metrics, 'Route Coverage': 'Submitted URL only', 'Browser Runtime Checks': 'Not performed', 'Detected Platforms': platformSignals.platforms.join(', ') || 'No reliable fingerprint detected' },
     };
 
     const safeReport = sanitizeAuditReport(report);
