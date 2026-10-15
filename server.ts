@@ -122,14 +122,14 @@ app.post('/api/audit', async (req, res) => {
   }
 });
 
-app.get('/api/report/:id', (req, res) => {
-  const report = getReportById(req.params.id);
+app.get('/api/report/:id', async (req, res) => {
+  const report = await getReportById(req.params.id);
   if (!report) return res.status(404).json({ error: 'Report not found or expired.' });
   return res.json(report);
 });
 
-app.get('/api/report/:id/md', (req, res) => {
-  const report = getReportById(req.params.id);
+app.get('/api/report/:id/md', async (req, res) => {
+  const report = await getReportById(req.params.id);
   if (!report) return res.status(404).send('# Error: Report not found or expired.');
   const markdown = generateAuditMarkdown(report);
   if (req.query.download === 'true') {
