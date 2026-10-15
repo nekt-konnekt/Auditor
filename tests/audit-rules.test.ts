@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { calculateAuditScores, runUrlDeterministicAudit } from '../src/lib/audit-rules.ts';
+import { calculateAuditScores, calculateReadinessVerdict, runUrlDeterministicAudit } from '../src/lib/audit-rules.ts';
 import type { UrlAuditInput } from '../src/lib/audit-rules.ts';
 
 const cleanHtml = `<!doctype html>
@@ -123,4 +123,35 @@ test('scores are severity-weighted and category pass counts remain distinct from
   assert.equal(scores.categories.performance.passedCount, 0);
   assert.equal(scores.categories.performance.totalChecks, 1);
   assert.equal(scores.overallScore, 98);
+});
+
+
+test('readiness verdict is independent of score and explicit blockers always win', () => {
+  const highFinding = {
+    id: 'test-high',
+    category: 'security' as const,
+    severity: 'high' as const,
+    title: 'High severity issue',
+    description: 'A high-severity finding without a declared launch blocker.',
+    remediation: 'Fix the issue.',
+  };
+  assert.equal(calculateReadinessVerdict([]), 'Ready');
+  assert.equal(calculateReadinessVerdict([highFinding]), 'Risky');
+  assert.equal(calculateReadinessVerdict([{ ...highFinding, readinessBlocker: true }]), 'Not ready');
+  assert.equal(calculateReadinessVerdict([{ ...highFinding, severity: 'critical' as const }]), 'Risky');
+});
+
+test('score calculation includes a separate readiness verdict', () => {
+  const issue = {
+    id: 'test-blocker',
+    category: 'security' as const,
+    severity: 'critical' as const,
+    title: 'Confirmed launch blocker',
+    description: 'A confirmed blocker.',
+    remediation: 'Resolve it before launch.',
+    readinessBlocker: true,
+  };
+  const result = calculateAuditScores([issue]);
+  assert.equal(result.verdict, 'Not ready');
+  assert.equal(typeof result.overallScore, 'number');
 });
