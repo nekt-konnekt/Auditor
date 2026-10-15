@@ -1,4 +1,6 @@
 import { lookup } from 'node:dns/promises';
+import { request as httpRequest } from 'node:http';
+import { request as httpsRequest } from 'node:https';
 import { isIP } from 'node:net';
 
 const MAX_REDIRECTS = 5;
@@ -44,7 +46,9 @@ function isPublicAddress(address: string): boolean {
  * Validate every DNS answer before requesting a target. Redirects are handled
  * manually so each hop receives the same validation.
  */
-export async function validatePublicHttpUrl(input: string): Promise<URL> {
+type PublicAddress = { address: string; family: number };
+
+async function validatePublicHttpUrlWithAddresses(input: string): Promise<{ url: URL; addresses: PublicAddress[] }> {
   let url: URL;
   try {
     url = new URL(input);
@@ -64,8 +68,10 @@ export async function validatePublicHttpUrl(input: string): Promise<URL> {
 
   const hostname = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
   const family = isIP(hostname);
+  let addresses: PublicAddress[];
   if (family) {
     if (!isPublicAddress(hostname)) throw new Error('Local and private network targets are not allowed.');
+    addresses = [{ address: hostname, family }];
   } else {
     let records;
     try {
@@ -76,10 +82,88 @@ export async function validatePublicHttpUrl(input: string): Promise<URL> {
     if (!records.length || records.some((record) => !isPublicAddress(record.address))) {
       throw new Error('The target resolves to a local or non-public network address and cannot be audited.');
     }
+    addresses = records.map((record) => ({ address: record.address, family: record.family }));
   }
 
   url.hash = '';
-  return url;
+  return { url, addresses };
+}
+
+export async function validatePublicHttpUrl(input: string): Promise<URL> {
+  return (await validatePublicHttpUrlWithAddresses(input)).url;
+}
+
+/** Make the request using only the DNS addresses already validated above. */
+function requestPublicResponse(
+  url: URL,
+  addresses: PublicAddress[],
+  timeoutMs: number,
+  maxBodyBytes: number,
+  headers: Record<string, string>,
+): Promise<Response> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const fail = (error: Error) => {
+      if (settled) return;
+      settled = true;
+      reject(error);
+    };
+    const pinnedLookup = ((_hostname: string, options: { all?: boolean } | number, callback: (...args: any[]) => void) => {
+      if (typeof options === 'object' && options?.all) {
+        callback(null, addresses);
+      } else {
+        callback(null, addresses[0].address, addresses[0].family);
+      }
+    }) as any;
+    const requestOptions: Record<string, unknown> = {
+      method: 'GET',
+      headers,
+      lookup: pinnedLookup,
+    };
+    const hostname = url.hostname.replace(/^\[|\]$/g, '');
+    if (url.protocol === 'https:' && !isIP(hostname)) requestOptions.servername = hostname;
+
+    const transport = url.protocol === 'https:' ? httpsRequest : httpRequest;
+    const request = transport(url, requestOptions as never, (incoming) => {
+      const declaredLength = Number(incoming.headers['content-length'] || 0);
+      if (declaredLength > maxBodyBytes) {
+        incoming.destroy();
+        fail(new Error(maxBodyBytes === MAX_BODY_BYTES
+          ? 'The target page is larger than the 2 MB audit limit.'
+          : 'The target resource is larger than the 1 MB audit limit.'));
+        return;
+      }
+
+      const chunks: Buffer[] = [];
+      let total = 0;
+      incoming.on('data', (chunk: Buffer | string) => {
+        const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+        total += buffer.byteLength;
+        if (total > maxBodyBytes) {
+          incoming.destroy();
+          request.destroy();
+          fail(new Error(maxBodyBytes === MAX_BODY_BYTES
+            ? 'The target page is larger than the 2 MB audit limit.'
+            : 'The target resource is larger than the 1 MB audit limit.'));
+          return;
+        }
+        chunks.push(buffer);
+      });
+      incoming.once('error', (error) => fail(error));
+      incoming.once('end', () => {
+        if (settled) return;
+        const responseHeaders = new Headers();
+        for (const [key, value] of Object.entries(incoming.headers)) {
+          if (value !== undefined) responseHeaders.set(key, Array.isArray(value) ? value.join(', ') : String(value));
+        }
+        settled = true;
+        resolve(new Response(Buffer.concat(chunks), { status: incoming.statusCode || 502, headers: responseHeaders }));
+      });
+    });
+    request.setTimeout(timeoutMs, () => request.destroy(new Error('The target website timed out.')));
+    request.once('error', (error) => fail(error));
+    request.end();
+  });
 }
 
 async function readLimitedText(response: Response): Promise<string> {
