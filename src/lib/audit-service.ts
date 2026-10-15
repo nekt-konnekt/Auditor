@@ -9,6 +9,7 @@ import { analyzeWithGemini } from './gemini-auditor.ts';
 import { auditGitHubRepo, parseGitHubUrl } from './github-auditor.ts';
 import { fetchPublicPage, validatePublicHttpUrl } from './safe-fetch.ts';
 import { inspectReadinessPreflight } from './readiness-preflight.ts';
+import { scanPublicExposure } from './exposure-scan.ts';
 import { loadAuditReport, persistAuditReport, redactSensitiveText, sanitizeAuditReport } from './report-store.ts';
 
 // In-memory cache is intentionally bounded. Durable shared links require a database.
@@ -88,6 +89,8 @@ export async function executeAudit(payload: AuditRequestPayload): Promise<AuditR
       responseTimeMs,
     });
 
+    const exposureResult = await scanPublicExposure(url, html);
+
     // Error pages are useful to inspect, but AI analysis can mistake their markup
     // for the intended page. Keep these reports deterministic and label their limits.
     const aiResult = response.ok
@@ -101,7 +104,7 @@ export async function executeAudit(payload: AuditRequestPayload): Promise<AuditR
           additionalIssues: [],
         };
 
-    const allIssues = [...preflight.issues, ...deterministicIssues, ...aiResult.additionalIssues];
+    const allIssues = [...preflight.issues, ...exposureResult.issues, ...deterministicIssues, ...aiResult.additionalIssues];
     const { overallScore, categories, verdict } = calculateAuditScores(allIssues);
     const report: AuditReport = {
       id: reportId,
@@ -119,7 +122,7 @@ export async function executeAudit(payload: AuditRequestPayload): Promise<AuditR
       categories,
       summary: aiResult.summary,
       issues: allIssues,
-      metrics: { ...preflight.metrics, ...metrics, 'Route Coverage': 'Submitted URL only', 'Exposure Scan': 'Not performed', 'Browser Runtime Checks': 'Not performed' },
+      metrics: { ...preflight.metrics, ...metrics, ...exposureResult.metrics, 'Route Coverage': 'Submitted URL only', 'Browser Runtime Checks': 'Not performed' },
     };
 
     const safeReport = sanitizeAuditReport(report);
