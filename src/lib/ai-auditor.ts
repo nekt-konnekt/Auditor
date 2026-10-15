@@ -17,16 +17,16 @@ const fallbackSummary = (type: AuditKind, target: string, provider: string) =>
 
 function buildPrompt(type: AuditKind, target: string, content: string, meta: Record<string, any>): string {
   if (type === 'url') {
-    return 'You are an expert web application security, SEO, accessibility, and performance auditor. Analyze this website inspection snapshot.\\n' +
-      'URL: ' + target + '\\nHTTP status: ' + (meta.statusCode || 200) +
-      '\\nResponse time: ' + (meta.responseTimeMs || 0) + ' ms\\nObserved headers: ' +
-      JSON.stringify(meta.headers || {}) + '\\nHTML snippet / structure:\\n' + content.slice(0, 3000) +
-      '\\nIdentify only evidence-based, actionable issues. Do not infer vulnerabilities unsupported by this snapshot. Consider security headers, CORS, SEO metadata, and accessibility.';
+    return 'You are an expert web application security, SEO, accessibility, and performance auditor. Analyze this website inspection snapshot.\n' +
+      'URL: ' + target + '\nHTTP status: ' + (meta.statusCode || 200) +
+      '\nResponse time: ' + (meta.responseTimeMs || 0) + ' ms\nObserved headers: ' +
+      JSON.stringify(meta.headers || {}) + '\nHTML snippet / structure:\n' + content.slice(0, 3000) +
+      '\nIdentify only evidence-based, actionable issues. Do not infer vulnerabilities unsupported by this snapshot. Consider security headers, CORS, SEO metadata, and accessibility.';
   }
   return 'You are an expert software security auditor and static analysis specialist. Analyze source code (' +
-    (meta.language || 'text') + '), file: ' + (meta.filename || target) + '.\\nSource:\\n' +
+    (meta.language || 'text') + '), file: ' + (meta.filename || target) + '.\nSource:\n' +
     content.slice(0, 4000) +
-    '\\nLook for evidence-based vulnerabilities and quality issues including OWASP Top 10, CWE patterns, logic errors, input validation, authentication/authorization gaps, and unsafe execution. Do not claim vulnerabilities without evidence. Give actionable remediation.';
+    '\nLook for evidence-based vulnerabilities and quality issues including OWASP Top 10, CWE patterns, logic errors, input validation, authentication/authorization gaps, and unsafe execution. Do not claim vulnerabilities without evidence. Give actionable remediation.';
 }
 
 const schemaHint = 'Return only a valid JSON object with shape: {"summary":"2-4 sentence executive summary","issues":[{"category":"security|seo|accessibility|performance|quality","severity":"critical|high|medium|low|passed","title":"short title","description":"evidence-based explanation","impact":"real-world impact","remediation":"concrete fix","originalCode":"optional evidence snippet","proposedFix":"optional replacement"}]}. Use an empty issues array when no additional findings are justified.';
@@ -82,7 +82,7 @@ async function analyzeWithGemini(prompt: string, apiKey: string, model: string):
 }
 
 async function analyzeOpenAICompatible(provider: Provider, prompt: string, apiKey: string, baseUrl: string, model: string): Promise<string> {
-  const response = await fetch(baseUrl.replace(/\\/+$/, '') + '/chat/completions', {
+  const response = await fetch(baseUrl.replace(/\/+$/, '') + '/chat/completions', {
     method: 'POST',
     headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
     body: JSON.stringify({
