@@ -46,9 +46,9 @@ function isPublicAddress(address: string): boolean {
  * Validate every DNS answer before requesting a target. Redirects are handled
  * manually so each hop receives the same validation.
  */
-type PublicAddress = { address: string; family: number };
+export type ValidatedPublicAddress = { address: string; family: number };
 
-async function validatePublicHttpUrlWithAddresses(input: string): Promise<{ url: URL; addresses: PublicAddress[] }> {
+async function validatePublicHttpUrlWithAddresses(input: string): Promise<{ url: URL; addresses: ValidatedPublicAddress[] }> {
   let url: URL;
   try {
     url = new URL(input);
@@ -68,7 +68,7 @@ async function validatePublicHttpUrlWithAddresses(input: string): Promise<{ url:
 
   const hostname = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
   const family = isIP(hostname);
-  let addresses: PublicAddress[];
+  let addresses: ValidatedPublicAddress[];
   if (family) {
     if (!isPublicAddress(hostname)) throw new Error('Local and private network targets are not allowed.');
     addresses = [{ address: hostname, family }];
@@ -93,6 +93,17 @@ export async function validatePublicHttpUrl(input: string): Promise<URL> {
   return (await validatePublicHttpUrlWithAddresses(input)).url;
 }
 
+export async function getValidatedPublicAddresses(input: string): Promise<ValidatedPublicAddress[]> {
+  return (await validatePublicHttpUrlWithAddresses(input)).addresses;
+}
+
+export function createPinnedDnsLookup(addresses: ValidatedPublicAddress[]): any {
+  return ((_hostname: string, options: { all?: boolean } | number, callback: (...args: any[]) => void) => {
+    if (typeof options === 'object' && options?.all) callback(null, addresses);
+    else callback(null, addresses[0].address, addresses[0].family);
+  }) as any;
+}
+
 /** Make the request using only the DNS addresses already validated above. */
 function requestPublicResponse(
   url: URL,
@@ -108,17 +119,10 @@ function requestPublicResponse(
       settled = true;
       reject(error);
     };
-    const pinnedLookup = ((_hostname: string, options: { all?: boolean } | number, callback: (...args: any[]) => void) => {
-      if (typeof options === 'object' && options?.all) {
-        callback(null, addresses);
-      } else {
-        callback(null, addresses[0].address, addresses[0].family);
-      }
-    }) as any;
     const requestOptions: Record<string, unknown> = {
       method: 'GET',
       headers,
-      lookup: pinnedLookup,
+      lookup: createPinnedDnsLookup(addresses),
     };
     const hostname = url.hostname.replace(/^\[|\]$/g, '');
     if (url.protocol === 'https:' && !isIP(hostname)) requestOptions.servername = hostname;
