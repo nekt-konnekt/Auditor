@@ -10,7 +10,7 @@ import { auditGitHubRepo, parseGitHubUrl } from './github-auditor.ts';
 import { fetchPublicPage, validatePublicHttpUrl } from './safe-fetch.ts';
 import { inspectReadinessPreflight } from './readiness-preflight.ts';
 import { scanPublicExposure } from './exposure-scan.ts';
-import { detectPlatform } from './platform-detection.ts';
+import { detectPlatform, getPlatformGuidance } from './platform-detection.ts';
 import { crawlAdditionalRoutes, MAX_ADDITIONAL_ROUTES } from './route-crawler.ts';
 import { loadAuditReport, persistAuditReport, redactSensitiveText, sanitizeAuditReport } from './report-store.ts';
 
@@ -94,7 +94,7 @@ export async function executeAudit(payload: AuditRequestPayload): Promise<AuditR
     const exposureResult = await scanPublicExposure(url, html);
     const platformSignals = detectPlatform(headersMap, html);
     const platformIssues = platformSignals.platforms.length
-      ? [{ id: 'platform-fingerprint', category: 'quality' as const, severity: 'passed' as const, title: 'Platform Signals Detected', description: 'Auditor identified likely platform or infrastructure signals from public response headers and markup. Fingerprints are indicative, not definitive.', evidence: platformSignals.evidence.join('; '), remediation: 'Use these signals to select platform-specific deployment guidance, and confirm the platform from your hosting configuration.' }]
+      ? [{ id: 'platform-fingerprint', category: 'quality' as const, severity: 'passed' as const, title: 'Platform Signals Detected', description: 'Auditor identified likely platform or infrastructure signals from public response headers and markup. Fingerprints are indicative, not definitive.', evidence: platformSignals.evidence.join('; '), remediation: getPlatformGuidance(platformSignals.platforms).join(' ') || 'Use these signals to select platform-specific deployment guidance, and confirm the platform from your hosting configuration.' }]
       : [];
 
     // Error pages are useful to inspect, but AI analysis can mistake their markup
