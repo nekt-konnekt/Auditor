@@ -30,6 +30,7 @@ export function generateAuditMarkdown(report: AuditReport): string {
 - **Audit Date**: ${dateFormatted}
 - **Audit ID**: \`${report.id}\`
 - **Target Type**: ${report.target.type.toUpperCase()}
+- **Readiness Verdict**: **${report.verdict}**
 - **${scoreLabel}**: **${report.overallScore} / 100**
 - **Scoring note**: This is a severity-weighted score, not the percentage of checks passed.
 ${report.target.responseTimeMs !== undefined ? `- **Initial HTML Fetch Duration**: ${report.target.responseTimeMs} ms\n` : ''}
