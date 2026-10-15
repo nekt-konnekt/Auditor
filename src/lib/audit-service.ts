@@ -8,7 +8,7 @@ import {
 import { analyzeWithGemini } from './gemini-auditor.ts';
 import { auditGitHubRepo, parseGitHubUrl } from './github-auditor.ts';
 import { fetchPublicPage } from './safe-fetch.ts';
-import { persistAuditReport, sanitizeAuditReport } from './report-store.ts';
+import { loadAuditReport, persistAuditReport, sanitizeAuditReport } from './report-store.ts';
 
 // In-memory cache is intentionally bounded. Durable shared links require a database.
 const reportsStore = new Map<string, AuditReport>();
@@ -136,16 +136,21 @@ export async function executeAudit(payload: AuditRequestPayload): Promise<AuditR
   return report;
 }
 
-export function getReportById(id: string): AuditReport | null {
+export async function getReportById(id: string): Promise<AuditReport | null> {
   const report = reportsStore.get(id);
-  if (!report) return null;
-  if (Date.now() - Date.parse(report.createdAt) > REPORT_TTL_MS) {
-    reportsStore.delete(id);
-    return null;
+  if (report && Date.now() - Date.parse(report.createdAt) <= REPORT_TTL_MS) return report;
+  if (report) reportsStore.delete(id);
+  const saved = await loadAuditReport(id);
+  if (!saved) return null;
+  reportsStore.set(id, saved);
+  while (reportsStore.size > MAX_REPORTS) {
+    const oldestId = reportsStore.keys().next().value;
+    if (!oldestId) break;
+    reportsStore.delete(oldestId);
   }
-  return report;
+  return saved;
 }
 
-export function saveReport(report: AuditReport): void {
-  storeReport(report);
+export async function saveReport(report: AuditReport): Promise<void> {
+  await storeReport(sanitizeAuditReport(report));
 }
