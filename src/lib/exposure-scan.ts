@@ -40,7 +40,7 @@ function maskSecret(value: string): string {
   return value.length <= 4 ? '[REDACTED]' : `${value.slice(0, 4)}…[REDACTED]`;
 }
 
-function secretMatches(body: string): Array<{ name: string; preview: string }> {
+export function detectExposureSecrets(body: string): Array<{ name: string; preview: string }> {
   const matches: Array<{ name: string; preview: string }> = [];
   for (const item of SECRET_PATTERNS) {
     // Reset state because global regex instances retain lastIndex between calls.
@@ -114,7 +114,7 @@ export async function scanPublicExposure(baseUrl: URL, html: string): Promise<Ex
     if (!bundle || bundle.status !== 200 || !bundle.body || isHtml(bundle.contentType, bundle.body)) continue;
     bundlesScanned += 1;
 
-    const matches = secretMatches(bundle.body);
+    const matches = detectExposureSecrets(bundle.body);
     for (const match of matches) {
       issues.push({
         id: `exposure-secret-${bundlesScanned}-${issues.length + 1}`,
@@ -146,7 +146,7 @@ export async function scanPublicExposure(baseUrl: URL, html: string): Promise<Ex
             evidence: `Confirmed source map at ${mapResult.url.toString()}`,
             remediation: 'Disable production source-map publication or restrict access if the source map exposes proprietary implementation details or sensitive comments.',
           });
-          for (const match of secretMatches(mapResult.body)) {
+          for (const match of detectExposureSecrets(mapResult.body)) {
             issues.push({
               id: `exposure-map-secret-${sourceMapsFound}-${issues.length + 1}`,
               category: 'security',
