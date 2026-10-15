@@ -113,15 +113,19 @@ export default function App() {
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || 'Re-scan failed.');
       const nextReport = data as AuditReport;
-      const compareResponse = await fetch(`/api/report/${encodeURIComponent(nextReport.id)}/compare/${encodeURIComponent(previousReport.id)}`);
-      const compareData = await compareResponse.json().catch(() => ({}));
-      if (!compareResponse.ok) throw new Error(compareData.error || 'Re-scan completed, but the comparison could not be loaded.');
-      setRescanDiff(compareData);
+
+      // A successful scan is useful even if the separate comparison request fails.
+      // Update the visible report and permalink before attempting the comparison.
       setActiveReport(nextReport);
       saveReportToHistory(nextReport);
       const url = new URL(window.location.href);
       url.searchParams.set('auditId', nextReport.id);
       window.history.pushState({}, '', url.toString());
+
+      const compareResponse = await fetch(`/api/report/${encodeURIComponent(nextReport.id)}/compare/${encodeURIComponent(previousReport.id)}`);
+      const compareData = await compareResponse.json().catch(() => ({}));
+      if (!compareResponse.ok) throw new Error(compareData.error || 'Re-scan completed, but the comparison could not be loaded.');
+      setRescanDiff(compareData);
     } catch (error) {
       setRescanError(error instanceof Error ? error.message : 'Re-scan failed.');
     } finally {
