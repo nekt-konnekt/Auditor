@@ -8,6 +8,16 @@ export const CERT_NEAR_EXPIRY_DAYS = 30;
 export const DOMAIN_NEAR_EXPIRY_DAYS = 30;
 const TLS_TIMEOUT_MS = 5_000;
 const RDAP_TIMEOUT_MS = 5_000;
+export const PLATFORM_MANAGED_SUFFIXES = [
+  'vercel.app', 'netlify.app', 'lovable.app', 'lovable.dev', 'bolt.host',
+  'replit.app', 'repl.co', 'pages.dev', 'onrender.com', 'railway.app',
+  'fly.dev', 'web.app', 'firebaseapp.com', 'github.io', 'herokuapp.com', 'supabase.co',
+] as const;
+
+export function isPlatformManagedHostname(hostname: string): boolean {
+  const normalized = hostname.toLowerCase().replace(/\\.$/, '');
+  return PLATFORM_MANAGED_SUFFIXES.some((suffix) => normalized === suffix || normalized.endsWith('.' + suffix));
+}
 
 export interface ReadinessPreflight {
   issues: AuditIssue[];
@@ -118,7 +128,9 @@ export async function inspectReadinessPreflight(url: URL): Promise<ReadinessPref
   const metrics: Record<string, string | number | boolean> = {};
   let tlsValid: boolean | null = null;
   const domain = getRegistrableDomain(url.hostname);
-  const registrationPromise = readDomainRegistration(domain);
+  const platformManaged = isPlatformManagedHostname(url.hostname);
+  const registrationPromise = platformManaged ? Promise.resolve(null) : readDomainRegistration(domain);
+  if (platformManaged) metrics['TLS Certificate Check'] = 'Platform-managed hostname; certificate check still performed';
 
   if (url.protocol !== 'https:') {
     tlsValid = false;
@@ -184,7 +196,9 @@ export async function inspectReadinessPreflight(url: URL): Promise<ReadinessPref
   }
 
   const registration = await registrationPromise;
-  if (!registration) {
+  if (platformManaged) {
+    metrics['Domain Expiry Status'] = 'Not applicable (platform subdomain)';
+  } else if (!registration) {
     metrics['Domain Expiry Status'] = 'Could not determine';
     issues.push({
       id: 'domain-expiry-unknown',
@@ -238,5 +252,10 @@ export async function inspectReadinessPreflight(url: URL): Promise<ReadinessPref
     }
   }
 
-  return { issues, metrics, tlsValid };
+  const readinessRelevantPrefixes = ['tls-', 'domain-'];
+  const readinessIssues = issues.map((issue) => ({
+    ...issue,
+    ...(readinessRelevantPrefixes.some((prefix) => issue.id.startsWith(prefix)) ? { readinessRelevant: true } : {}),
+  }));
+  return { issues: readinessIssues, metrics, tlsValid };
 }
