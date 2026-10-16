@@ -158,7 +158,7 @@ export async function scanPublicExposure(baseUrl: URL, html: string): Promise<Ex
               id: `exposure-map-secret-${sourceMapsFound}-${issues.length + 1}`,
               category: 'security',
               severity: 'critical',
-              readinessBlocker: true,
+              readinessRelevant: true,
               title: `Potential Exposed ${match.name} in Source Map`,
               description: `A public source map contains a value matching a ${match.name} pattern. The value has been masked and is not included in the report.`,
               evidence: `Masked preview: ${match.preview}; source map: ${mapResult.url.toString()}`,
