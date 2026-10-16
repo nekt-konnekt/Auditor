@@ -52,7 +52,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
   }, {} as Record<Severity, number>);
 
   const isHardeningFinding = (issue: AuditIssue) =>
-    ['sec-csp', 'sec-csp-weak', 'sec-hsts', 'sec-xfo', 'sec-xcto', 'sec-refpolicy'].includes(issue.id);
+    ['sec-csp', 'sec-hsts', 'sec-xfo', 'sec-xcto', 'sec-refpolicy'].includes(issue.id);
 
   const hardeningFindings = report.issues.filter(isHardeningFinding);
   const filteredIssues = report.issues.filter((issue) => {
