@@ -16,7 +16,7 @@ const fallbackSummary = (type: AuditKind, target: string, _provider: string) =>
     : 'Static source code audit performed for ' + target + '. Deterministic checks scanned common patterns. AI enrichment was unavailable for this run; the findings below are based on deterministic checks.';
 
 export function normalizeFindingText(value: string): string {
-  return value.toLowerCase().replace(/[\\u2010-\\u2015\\u2212]/g, '-').normalize('NFKC').replace(/[^a-z0-9]+/g, ' ').trim();
+  return value.normalize('NFKC').toLowerCase().replace(/[\u2010-\u2015\u2212]/g, '-').replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
 const knownRuleTerms: Array<[RegExp, string[]]> = [
@@ -42,17 +42,26 @@ export function overlapsRuleFinding(candidate: { id?: string; title?: string; de
 }
 
 function buildPrompt(type: AuditKind, target: string, content: string, meta: Record<string, any>): string {
+  const knownRules = Array.isArray(meta.ruleBasedFindings)
+    ? meta.ruleBasedFindings
+        .filter((item: any) => item && typeof item.id === 'string' && typeof item.title === 'string')
+        .map((item: any) => `- ${item.id}: ${item.title}`)
+        .join('\n')
+    : '';
+  const duplicateGuard = knownRules
+    ? '\nDeterministic findings already recorded (do not repeat or paraphrase these as AI findings):\n' + knownRules
+    : '';
   if (type === 'url') {
     return 'You are an expert web application security, SEO, accessibility, and performance auditor. Analyze this website inspection snapshot.\n' +
       'URL: ' + target + '\nHTTP status: ' + (meta.statusCode || 200) +
       '\nResponse time: ' + (meta.responseTimeMs || 0) + ' ms\nObserved headers: ' +
       JSON.stringify(meta.headers || {}) + '\nHTML snippet / structure:\n' + content.slice(0, 3000) +
-      '\nIdentify only evidence-based, actionable issues. Do not infer vulnerabilities unsupported by this snapshot. Consider security headers, CORS, SEO metadata, and accessibility.';
+      '\nIdentify only evidence-based, actionable issues. Do not infer vulnerabilities unsupported by this snapshot. Consider security headers, CORS, SEO metadata, and accessibility.' + duplicateGuard;
   }
   return 'You are an expert software security auditor and static analysis specialist. Analyze source code (' +
     (meta.language || 'text') + '), file: ' + (meta.filename || target) + '.\nSource:\n' +
     content.slice(0, 4000) +
-    '\nLook for evidence-based vulnerabilities and quality issues including OWASP Top 10, CWE patterns, logic errors, input validation, authentication/authorization gaps, and unsafe execution. Do not claim vulnerabilities without evidence. Give actionable remediation.';
+    '\nLook for evidence-based vulnerabilities and quality issues including OWASP Top 10, CWE patterns, logic errors, input validation, authentication/authorization gaps, and unsafe execution. Do not claim vulnerabilities without evidence. Give actionable remediation.' + duplicateGuard;
 }
 
 const schemaHint = 'Return only one compact, valid JSON object with shape: {\"summary\":\"2-4 sentence executive summary\",\"issues\":[{\"category\":\"security|seo|accessibility|performance|quality\",\"severity\":\"critical|high|medium|low|passed\",\"title\":\"short title\",\"description\":\"evidence-based explanation\",\"impact\":\"real-world impact\",\"remediation\":\"concrete fix\",\"originalCode\":\"optional short evidence snippet\",\"proposedFix\":\"optional short replacement\"}]}. Return at most 8 issues, keep fields concise, and do not use Markdown fences or text outside the JSON. Use an empty issues array when no additional findings are justified.';
