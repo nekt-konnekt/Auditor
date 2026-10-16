@@ -150,6 +150,7 @@ export async function executeAudit(payload: AuditRequestPayload): Promise<AuditR
           statusCode: response.status,
           responseTimeMs,
           headers: headersMap,
+          ruleBasedFindings: deterministicIssues.map(({ id, title }) => ({ id, title })),
         })
       : {
           summary: `The target returned HTTP ${response.status}. This report describes the returned error response, not necessarily the intended website page. Resolve the HTTP status and rerun the audit before relying on SEO or accessibility conclusions.`,
@@ -173,8 +174,9 @@ export async function executeAudit(payload: AuditRequestPayload): Promise<AuditR
         description: `Route check for ${route.url.toString()}. ${issue.description}`,
       }));
     });
-    const allIssues = deduplicateFindings([...preflight.issues, ...exposureResult.issues, ...platformIssues, ...deterministicIssues, ...aiResult.additionalIssues, ...routeIssues]);
-    const { overallScore, categories, verdict } = calculateAuditScores(allIssues);
+    const ruleBasedIssues = deduplicateFindings([...preflight.issues, ...exposureResult.issues, ...platformIssues, ...deterministicIssues, ...routeIssues]);
+    const aiObservations = aiResult.additionalIssues.filter((issue) => !canonicalFindingKey(issue).startsWith('security:') && !canonicalFindingKey(issue).startsWith('seo:') && !canonicalFindingKey(issue).startsWith('accessibility:') && !canonicalFindingKey(issue).startsWith('performance:'));
+    const { overallScore, categories, verdict } = calculateAuditScores(ruleBasedIssues);
     const report: AuditReport = {
       id: reportId,
       createdAt,
@@ -190,7 +192,8 @@ export async function executeAudit(payload: AuditRequestPayload): Promise<AuditR
       verdict,
       categories,
       summary: aiResult.summary,
-      issues: allIssues,
+      issues: ruleBasedIssues,
+      aiObservations,
       metrics: { ...preflight.metrics, ...metrics, ...exposureResult.metrics, 'Route Coverage': `${routeCrawl.routes.length + 1} page(s) audited (submitted page plus ${routeCrawl.routes.length} additional routes)`, 'Additional Routes Attempted': routeCrawl.attempted, 'Additional Route Budget': MAX_ADDITIONAL_ROUTES, 'Robots.txt': routeCrawl.robotsStatus === 'checked' ? 'Checked before discovering additional same-origin routes' : 'Unavailable; additional route discovery skipped', 'Browser Runtime Checks': 'Not performed', 'Detected Platforms': platformSignals.platforms.join(', ') || 'No reliable fingerprint detected' },
     };
 
@@ -207,7 +210,8 @@ export async function executeAudit(payload: AuditRequestPayload): Promise<AuditR
 
   const { issues: deterministicIssues, metrics } = runCodeDeterministicAudit({ code, language, filename });
   const aiResult = await analyzeWithAI('code', filename, redactSensitiveText(code), { language, filename });
-  const allIssues = deduplicateFindings([...deterministicIssues, ...aiResult.additionalIssues]);
+  const allIssues = deduplicateFindings(deterministicIssues);
+  const aiObservations = aiResult.additionalIssues;
   const { overallScore, categories, verdict } = calculateAuditScores(allIssues);
   const report: AuditReport = {
     id: reportId,
@@ -224,6 +228,7 @@ export async function executeAudit(payload: AuditRequestPayload): Promise<AuditR
     categories,
     summary: aiResult.summary,
     issues: allIssues,
+    aiObservations,
     metrics,
   };
 
