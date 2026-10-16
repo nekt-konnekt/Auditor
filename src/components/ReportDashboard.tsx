@@ -51,7 +51,12 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
     return acc;
   }, {} as Record<Severity, number>);
 
+  const isHardeningFinding = (issue: AuditIssue) =>
+    ['sec-csp', 'sec-csp-weak', 'sec-hsts', 'sec-xfo', 'sec-xcto', 'sec-refpolicy'].includes(issue.id);
+
+  const hardeningFindings = report.issues.filter(isHardeningFinding);
   const filteredIssues = report.issues.filter((issue) => {
+    if (isHardeningFinding(issue)) return false;
     if (selectedSeverity !== 'all' && issue.severity !== selectedSeverity) {
       return false;
     }
@@ -475,6 +480,28 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Security-header hardening is visible but never drives launch readiness. */}
+      {hardeningFindings.length > 0 && (
+        <section aria-label="Hardening tips" className="space-y-3">
+          <div>
+            <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Hardening tips</h2>
+            <p className="mt-1 text-xs text-slate-500">Security-header improvements affect the security score, but do not change the launch-readiness verdict.</p>
+          </div>
+          {hardeningFindings.map((issue) => (
+            <article key={issue.id} className="rounded-xl border border-slate-200 bg-white p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold text-slate-500">{issue.severity.toUpperCase()} · Security hardening</p>
+                  <h3 className="mt-1 text-sm font-bold text-slate-900">{issue.title}</h3>
+                  <p className="mt-1 text-xs leading-relaxed text-slate-600">{issue.description}</p>
+                  <p className="mt-2 text-xs leading-relaxed text-slate-700"><strong>Recommended action:</strong> {issue.remediation}</p>
+                </div>
+              </div>
+            </article>
+          ))}
+        </section>
+      )}
 
       {/* Issues List */}
       <div className="space-y-4">
