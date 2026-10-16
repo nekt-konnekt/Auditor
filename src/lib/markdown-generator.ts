@@ -1,4 +1,4 @@
-import { AuditReport, Category, Severity } from '../types/audit.ts';
+import type { AuditReport, Category, Severity } from '../types/audit.ts';
 
 const CATEGORY_NAMES: Record<Category, string> = {
   security: 'Security & Headers',
