@@ -2,7 +2,7 @@ import tls from 'node:tls';
 import { isIP } from 'node:net';
 import { getDomain } from 'tldts';
 import { createPinnedDnsLookup, getValidatedPublicAddresses } from './safe-fetch.ts';
-import { AuditIssue } from '../types/audit.ts';
+import type { AuditIssue } from '../types/audit.ts';
 
 export const CERT_NEAR_EXPIRY_DAYS = 30;
 export const DOMAIN_NEAR_EXPIRY_DAYS = 30;
