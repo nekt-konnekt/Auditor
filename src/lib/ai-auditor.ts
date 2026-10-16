@@ -15,6 +15,32 @@ const fallbackSummary = (type: AuditKind, target: string, _provider: string) =>
     ? 'Audit conducted on ' + target + '. Deterministic checks evaluated HTTP headers, SEO metadata, markup accessibility, and response timing. AI enrichment was unavailable for this run; the findings below are based on deterministic checks.'
     : 'Static source code audit performed for ' + target + '. Deterministic checks scanned common patterns. AI enrichment was unavailable for this run; the findings below are based on deterministic checks.';
 
+export function normalizeFindingText(value: string): string {
+  return value.toLowerCase().replace(/[\\u2010-\\u2015\\u2212]/g, '-').normalize('NFKC').replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+const knownRuleTerms: Array<[RegExp, string[]]> = [
+  [/content.?security.?policy|\\bcsp\\b/i, ['content security policy', 'csp']],
+  [/strict.?transport.?security|\\bhsts\\b/i, ['strict transport security', 'hsts']],
+  [/x.?frame.?options|clickjack|frame.?ancestors/i, ['x frame options', 'clickjacking', 'frame ancestors']],
+  [/x.?content.?type.?options|mime.?type.?sniff/i, ['x content type options', 'nosniff', 'mime type sniff']],
+  [/referrer.?policy|referrer header/i, ['referrer policy']],
+  [/meta.?description/i, ['meta description']],
+  [/missing.*h1|primary heading|heading element/i, ['h1', 'primary heading', 'heading structure']],
+];
+
+export function overlapsRuleFinding(candidate: { id?: string; title?: string; description?: string }, rules: Array<{ id: string; title: string }>): boolean {
+  const candidateText = normalizeFindingText([candidate.id, candidate.title, candidate.description].filter(Boolean).join(' '));
+  const candidateTokens = new Set(candidateText.split(' '));
+  return rules.some((rule) => {
+    const ruleText = normalizeFindingText(rule.id + ' ' + rule.title);
+    if (normalizeFindingText(rule.id) === normalizeFindingText(candidate.id || '') || ruleText === normalizeFindingText(candidate.title || '')) return true;
+    if (ruleText.split(' ').some((term) => term.length > 4 && candidateTokens.has(term))) return true;
+    const terms = knownRuleTerms.find(([pattern]) => pattern.test(rule.id + ' ' + rule.title))?.[1] || [];
+    return terms.some((term) => candidateText.includes(normalizeFindingText(term)));
+  });
+}
+
 function buildPrompt(type: AuditKind, target: string, content: string, meta: Record<string, any>): string {
   if (type === 'url') {
     return 'You are an expert web application security, SEO, accessibility, and performance auditor. Analyze this website inspection snapshot.\n' +
@@ -31,7 +57,7 @@ function buildPrompt(type: AuditKind, target: string, content: string, meta: Rec
 
 const schemaHint = 'Return only one compact, valid JSON object with shape: {\"summary\":\"2-4 sentence executive summary\",\"issues\":[{\"category\":\"security|seo|accessibility|performance|quality\",\"severity\":\"critical|high|medium|low|passed\",\"title\":\"short title\",\"description\":\"evidence-based explanation\",\"impact\":\"real-world impact\",\"remediation\":\"concrete fix\",\"originalCode\":\"optional short evidence snippet\",\"proposedFix\":\"optional short replacement\"}]}. Return at most 8 issues, keep fields concise, and do not use Markdown fences or text outside the JSON. Use an empty issues array when no additional findings are justified.';
 
-function parseAnalysis(raw: string, type: AuditKind): AiAuditAnalysis {
+export function parseAnalysis(raw: string, type: AuditKind, ruleBasedFindings: Array<{ id: string; title: string }> = []): AiAuditAnalysis {
   // Providers occasionally wrap otherwise valid JSON in Markdown fences or add a short preamble.
   // Extract the outermost object before parsing; malformed/truncated JSON still fails safely.
   const trimmed = raw.trim();
@@ -42,7 +68,7 @@ function parseAnalysis(raw: string, type: AuditKind): AiAuditAnalysis {
   const parsed = JSON.parse(jsonText);
   const rawIssues = Array.isArray(parsed.issues) ? parsed.issues : [];
   const additionalIssues: AuditIssue[] = rawIssues
-    .filter((item: any) => item && typeof item.title === 'string' && typeof item.description === 'string')
+    .filter((item: any) => item && typeof item.title === 'string' && typeof item.description === 'string' && !overlapsRuleFinding(item, ruleBasedFindings))
     .slice(0, 30)
     .map((item: any, idx: number) => {
       const category = validCategories.includes(item.category) ? item.category : (type === 'url' ? 'seo' : 'security');
@@ -165,7 +191,7 @@ export async function analyzeWithAI(
       const raw = provider === 'gemini'
         ? await analyzeWithGemini(prompt, config.key, config.model)
         : await analyzeOpenAICompatible(provider, prompt, config.key, config.baseUrl, config.model);
-      return parseAnalysis(raw, type);
+      return parseAnalysis(raw, type, Array.isArray(contextMeta.ruleBasedFindings) ? contextMeta.ruleBasedFindings : []);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'unknown error';
       errors.push(provider + ': ' + message);
