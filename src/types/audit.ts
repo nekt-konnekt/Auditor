@@ -8,6 +8,8 @@ export interface AuditIssue {
   id: string;
   category: Category;
   severity: Severity;
+  /** Explicitly marks findings allowed to influence the launch-readiness verdict. */
+  readinessRelevant?: boolean;
   /** True only when this finding independently blocks launch readiness. */
   readinessBlocker?: boolean;
   title: string;
@@ -51,6 +53,8 @@ export interface AuditReport {
   categories: Record<Category, CategoryScore>;
   summary: string;
   issues: AuditIssue[];
+  /** AI-generated observations are informational and excluded from scores and diffs. */
+  aiObservations?: AuditIssue[];
   metrics?: Record<string, string | number | boolean>;
 }
 
