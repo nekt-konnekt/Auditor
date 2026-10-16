@@ -727,7 +727,7 @@ export function calculateReadinessVerdict(issues: AuditIssue[]): ReadinessVerdic
   const relevant = issues.filter((issue) => issue.readinessRelevant === true);
   if (relevant.some((issue) => issue.readinessBlocker === true)) return 'Not ready';
 
-  const riskyId = /^(?:tls-certificate-near-expiry|domain-near-expiry|exposure-source-map-|exposure-secret-probable-)/;
+  const riskyId = /^(?:tls-certificate-near-expiry|domain-near-expiry|exposure-source-map-|exposure-secret-|exposure-map-secret-)/;
   if (relevant.some((issue) => riskyId.test(issue.id))) return 'Risky';
   return 'Ready';
 }
