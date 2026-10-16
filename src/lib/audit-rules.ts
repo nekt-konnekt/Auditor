@@ -1,5 +1,5 @@
 import * as cheerio from 'cheerio';
-import { AuditIssue, AuditReport, Category, CategoryScore, ReadinessVerdict } from '../types/audit.ts';
+import type { AuditIssue, AuditReport, Category, CategoryScore, ReadinessVerdict } from '../types/audit.ts';
 
 export interface UrlAuditInput {
   url: string;
