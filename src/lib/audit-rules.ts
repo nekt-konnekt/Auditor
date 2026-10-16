@@ -713,7 +713,12 @@ export function runCodeDeterministicAudit(input: CodeAuditInput): {
     });
   }
 
-  return { issues, metrics };
+  const readinessRulePrefixes = ['sec-', 'tls-', 'domain-', 'exposure-', 'secret-', 'env-', 'git-'];
+  const readinessRelevantIssues = issues.map((issue) => ({
+    ...issue,
+    ...(readinessRulePrefixes.some((prefix) => issue.id.startsWith(prefix)) ? { readinessRelevant: true } : {}),
+  }));
+  return { issues: readinessRelevantIssues, metrics };
 }
 
 /**
@@ -722,7 +727,7 @@ export function runCodeDeterministicAudit(input: CodeAuditInput): {
  */
 export function calculateReadinessVerdict(issues: AuditIssue[]): ReadinessVerdict {
   if (issues.some((issue) => issue.readinessBlocker === true)) return 'Not ready';
-  if (issues.some((issue) => issue.severity === 'critical' || issue.severity === 'high')) return 'Risky';
+  if (issues.some((issue) => issue.readinessRelevant === true && (issue.severity === 'critical' || issue.severity === 'high'))) return 'Risky';
   return 'Ready';
 }
 
