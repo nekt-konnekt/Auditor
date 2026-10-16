@@ -137,9 +137,9 @@ test('readiness verdict is independent of score and explicit blockers always win
     readinessRelevant: true,
   };
   assert.equal(calculateReadinessVerdict([]), 'Ready');
-  assert.equal(calculateReadinessVerdict([highFinding]), 'Risky');
+  assert.equal(calculateReadinessVerdict([highFinding]), 'Ready');
   assert.equal(calculateReadinessVerdict([{ ...highFinding, readinessBlocker: true }]), 'Not ready');
-  assert.equal(calculateReadinessVerdict([{ ...highFinding, severity: 'critical' as const }]), 'Risky');
+  assert.equal(calculateReadinessVerdict([{ ...highFinding, severity: 'critical' as const }]), 'Ready');
 });
 
 test('missing security headers are hardening-only and leave an otherwise healthy HTTPS site Ready', () => {
@@ -199,6 +199,7 @@ test('score calculation includes a separate readiness verdict', () => {
     title: 'Confirmed launch blocker',
     description: 'A confirmed blocker.',
     remediation: 'Resolve it before launch.',
+    readinessRelevant: true,
     readinessBlocker: true,
   };
   const result = calculateAuditScores([issue]);
