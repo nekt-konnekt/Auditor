@@ -63,7 +63,7 @@ ${report.summary}
   });
 
   const isHardeningFinding = (issue: AuditReport['issues'][number]) =>
-    ['sec-csp', 'sec-csp-weak', 'sec-hsts', 'sec-xfo', 'sec-xcto', 'sec-refpolicy'].includes(issue.id);
+    ['sec-csp', 'sec-hsts', 'sec-xfo', 'sec-xcto', 'sec-refpolicy'].includes(issue.id);
   const hardeningFindings = report.issues.filter(isHardeningFinding);
 
   md += `\n---\n\n## Findings & Recommendations\n\n`;
