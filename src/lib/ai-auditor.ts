@@ -1,4 +1,4 @@
-import { AuditIssue } from '../types/audit.ts';
+import type { AuditIssue } from '../types/audit.ts';
 
 export interface AiAuditAnalysis {
   summary: string;
