@@ -1,4 +1,4 @@
-import { AuditIssue, AuditReport, Category, CategoryScore } from '../types/audit.ts';
+import type { AuditIssue, AuditReport, Category, CategoryScore } from '../types/audit.ts';
 import { calculateAuditScores } from './audit-rules.ts';
 import { analyzeWithGemini } from './gemini-auditor.ts';
 
