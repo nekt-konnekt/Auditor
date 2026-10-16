@@ -521,7 +521,10 @@ export function runUrlDeterministicAudit(input: UrlAuditInput): {
     });
   }
 
-  return { issues, metrics };
+  const readinessIssues = issues.map((issue) => issue.id === 'sec-https'
+    ? { ...issue, readinessRelevant: true, readinessBlocker: true }
+    : issue);
+  return { issues: readinessIssues, metrics };
 }
 
 /**
@@ -713,21 +716,19 @@ export function runCodeDeterministicAudit(input: CodeAuditInput): {
     });
   }
 
-  const readinessRulePrefixes = ['sec-', 'tls-', 'domain-', 'exposure-', 'secret-', 'env-', 'git-'];
-  const readinessRelevantIssues = issues.map((issue) => ({
-    ...issue,
-    ...(readinessRulePrefixes.some((prefix) => issue.id.startsWith(prefix)) ? { readinessRelevant: true } : {}),
-  }));
-  return { issues: readinessRelevantIssues, metrics };
+  return { issues, metrics };
 }
 
 /**
- * A readiness verdict is independent from the numeric quality score.
- * Explicit blockers always win; critical/high findings without a blocker are Risky.
+ * Readiness is driven only by explicitly relevant findings. Severity alone never
+ * changes the verdict: hardening headers and SEO/a11y/performance remain score-only.
  */
 export function calculateReadinessVerdict(issues: AuditIssue[]): ReadinessVerdict {
-  if (issues.some((issue) => issue.readinessBlocker === true)) return 'Not ready';
-  if (issues.some((issue) => issue.readinessRelevant === true && (issue.severity === 'critical' || issue.severity === 'high'))) return 'Risky';
+  const relevant = issues.filter((issue) => issue.readinessRelevant === true);
+  if (relevant.some((issue) => issue.readinessBlocker === true)) return 'Not ready';
+
+  const riskyId = /^(?:tls-certificate-near-expiry|domain-near-expiry|exposure-source-map-|exposure-secret-probable-)/;
+  if (relevant.some((issue) => riskyId.test(issue.id))) return 'Risky';
   return 'Ready';
 }
 
