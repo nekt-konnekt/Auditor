@@ -134,11 +134,61 @@ test('readiness verdict is independent of score and explicit blockers always win
     title: 'High severity issue',
     description: 'A high-severity finding without a declared launch blocker.',
     remediation: 'Fix the issue.',
+    readinessRelevant: true,
   };
   assert.equal(calculateReadinessVerdict([]), 'Ready');
   assert.equal(calculateReadinessVerdict([highFinding]), 'Risky');
   assert.equal(calculateReadinessVerdict([{ ...highFinding, readinessBlocker: true }]), 'Not ready');
   assert.equal(calculateReadinessVerdict([{ ...highFinding, severity: 'critical' as const }]), 'Risky');
+});
+
+test('missing security headers are hardening-only and leave an otherwise healthy HTTPS site Ready', () => {
+  const result = audit({ headers: {} });
+  const headerFindings = result.issues.filter((issue) => ['sec-csp', 'sec-hsts', 'sec-xfo', 'sec-xcto', 'sec-refpolicy'].includes(issue.id));
+  assert.ok(headerFindings.length >= 4);
+  assert.ok(headerFindings.every((issue) => issue.readinessRelevant !== true));
+  assert.equal(calculateReadinessVerdict(result.issues), 'Ready');
+});
+
+test('expired certificate is Not ready when explicitly marked readiness-relevant', () => {
+  assert.equal(calculateReadinessVerdict([{
+    id: 'tls-certificate-invalid',
+    category: 'security',
+    severity: 'critical',
+    title: 'TLS Certificate Expired',
+    description: 'Expired certificate.',
+    remediation: 'Renew it.',
+    readinessRelevant: true,
+    readinessBlocker: true,
+  }]), 'Not ready');
+});
+
+test('public source maps are Risky when explicitly marked readiness-relevant', () => {
+  assert.equal(calculateReadinessVerdict([{
+    id: 'exposure-source-map-1',
+    category: 'security',
+    severity: 'high',
+    title: 'Public JavaScript Source Map',
+    description: 'Source map is public.',
+    remediation: 'Disable public source maps.',
+    readinessRelevant: true,
+  }]), 'Risky');
+});
+
+test('SEO high severity findings do not change readiness verdict', () => {
+  assert.equal(calculateReadinessVerdict([{
+    id: 'seo-test-high',
+    category: 'seo',
+    severity: 'high',
+    title: 'High SEO finding',
+    description: 'SEO only.',
+    remediation: 'Improve SEO.',
+  }]), 'Ready');
+});
+
+test('HTTP-only transport is Not ready', () => {
+  const result = audit({ url: 'http://example.com/' });
+  assert.equal(calculateReadinessVerdict(result.issues), 'Not ready');
 });
 
 test('score calculation includes a separate readiness verdict', () => {
