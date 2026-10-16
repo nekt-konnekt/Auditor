@@ -20,8 +20,8 @@ export function normalizeFindingText(value: string): string {
 }
 
 const knownRuleTerms: Array<[RegExp, string[]]> = [
-  [/content.?security.?policy|\\bcsp\\b/i, ['content security policy', 'csp']],
-  [/strict.?transport.?security|\\bhsts\\b/i, ['strict transport security', 'hsts']],
+  [/content.?security.?policy|\bcsp\b/i, ['content security policy', 'csp']],
+  [/strict.?transport.?security|\bhsts\b/i, ['strict transport security', 'hsts']],
   [/x.?frame.?options|clickjack|frame.?ancestors/i, ['x frame options', 'clickjacking', 'frame ancestors']],
   [/x.?content.?type.?options|mime.?type.?sniff/i, ['x content type options', 'nosniff', 'mime type sniff']],
   [/referrer.?policy|referrer header/i, ['referrer policy']],
