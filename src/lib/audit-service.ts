@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { AuditReport, AuditRequestPayload } from '../types/audit.ts';
+import type { AuditReport, AuditRequestPayload } from '../types/audit.ts';
 import {
   calculateAuditScores,
   runCodeDeterministicAudit,
