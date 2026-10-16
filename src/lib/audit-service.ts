@@ -23,6 +23,52 @@ function generateId(): string {
   return 'aud-' + randomUUID();
 }
 
+
+/**
+ * Collapse duplicate representations of the same URL rule. Deterministic rules
+ * are authoritative; AI findings are retained only when they describe a distinct
+ * issue. Route-specific findings remain separate because their IDs include a route.
+ */
+function canonicalFindingKey(issue: AuditReport['issues'][number]): string {
+  const text = `${issue.category} ${issue.title} ${issue.id}`.toLowerCase();
+  const rules: Array<[RegExp, string]> = [
+    [/content.?security.?policy|\bcsp\b/, 'security:csp'],
+    [/strict.?transport.?security|\bhsts\b/, 'security:hsts'],
+    [/x.?frame.?options|clickjack|frame.?ancestors/, 'security:frame-protection'],
+    [/x.?content.?type.?options|mime.?type.?sniff/, 'security:nosniff'],
+    [/referrer.?policy|referrer header/, 'security:referrer-policy'],
+    [/meta description/, 'seo:meta-description'],
+    [/open.?graph|social card|og:title|og:image/, 'seo:open-graph'],
+    [/canonical/, 'seo:canonical'],
+    [/heading structure|missing.*h1|primary heading|heading element/, 'accessibility:h1'],
+    [/cache.?control|caching directives/, 'performance:cache-control'],
+  ];
+  const matched = rules.find(([pattern]) => pattern.test(text));
+  if (matched) return matched[1];
+  // IDs are more stable than generated prose for all other rules.
+  return issue.id.replace(/-route-[a-z0-9_-]+$/i, '');
+}
+
+function deduplicateFindings(issues: AuditReport['issues']): AuditReport['issues'] {
+  const result: AuditReport['issues'] = [];
+  const positions = new Map<string, number>();
+  for (const issue of issues) {
+    const key = canonicalFindingKey(issue);
+    const existingIndex = positions.get(key);
+    if (existingIndex === undefined) {
+      positions.set(key, result.length);
+      result.push(issue);
+      continue;
+    }
+    const existing = result[existingIndex];
+    // Prefer deterministic, evidence-backed findings over paraphrased AI copies.
+    const existingDeterministic = /^(sec-|seo-|a11y-|perf-|tls-|domain-)/.test(existing.id);
+    const incomingDeterministic = /^(sec-|seo-|a11y-|perf-|tls-|domain-)/.test(issue.id);
+    if (incomingDeterministic && !existingDeterministic) result[existingIndex] = issue;
+  }
+  return result;
+}
+
 async function storeReport(report: AuditReport): Promise<void> {
   const now = Date.now();
   for (const [id, saved] of reportsStore) {
@@ -127,7 +173,7 @@ export async function executeAudit(payload: AuditRequestPayload): Promise<AuditR
         description: `Route check for ${route.url.toString()}. ${issue.description}`,
       }));
     });
-    const allIssues = [...preflight.issues, ...exposureResult.issues, ...platformIssues, ...deterministicIssues, ...aiResult.additionalIssues, ...routeIssues];
+    const allIssues = deduplicateFindings([...preflight.issues, ...exposureResult.issues, ...platformIssues, ...deterministicIssues, ...aiResult.additionalIssues, ...routeIssues]);
     const { overallScore, categories, verdict } = calculateAuditScores(allIssues);
     const report: AuditReport = {
       id: reportId,
@@ -161,7 +207,7 @@ export async function executeAudit(payload: AuditRequestPayload): Promise<AuditR
 
   const { issues: deterministicIssues, metrics } = runCodeDeterministicAudit({ code, language, filename });
   const aiResult = await analyzeWithAI('code', filename, redactSensitiveText(code), { language, filename });
-  const allIssues = [...deterministicIssues, ...aiResult.additionalIssues];
+  const allIssues = deduplicateFindings([...deterministicIssues, ...aiResult.additionalIssues]);
   const { overallScore, categories, verdict } = calculateAuditScores(allIssues);
   const report: AuditReport = {
     id: reportId,
