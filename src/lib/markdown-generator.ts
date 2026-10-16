@@ -62,9 +62,21 @@ ${report.summary}
     md += `| ${name} | ${scoreVal} | ${checksVal} | ${status} |\n`;
   });
 
+  const isHardeningFinding = (issue: AuditReport['issues'][number]) =>
+    ['sec-csp', 'sec-csp-weak', 'sec-hsts', 'sec-xfo', 'sec-xcto', 'sec-refpolicy'].includes(issue.id);
+  const hardeningFindings = report.issues.filter(isHardeningFinding);
+
   md += `\n---\n\n## Findings & Recommendations\n\n`;
 
-  const issuesGroupedByCat = report.issues.reduce((acc, issue) => {
+  if (hardeningFindings.length > 0) {
+    md += '### Hardening tips\n\nSecurity-header improvements affect the security score but do not change the launch-readiness verdict.\n\n';
+    hardeningFindings.forEach((issue) => {
+      md += `- **[${issue.severity.toUpperCase()}] ${issue.title}** — ${issue.description}\n  - **Recommended action:** ${issue.remediation}\n`;
+    });
+    md += '\n---\n\n';
+  }
+
+  const issuesGroupedByCat = report.issues.filter((issue) => !isHardeningFinding(issue)).reduce((acc, issue) => {
     if (!acc[issue.category]) acc[issue.category] = [];
     acc[issue.category].push(issue);
     return acc;
