@@ -89,6 +89,14 @@ test('long meta descriptions are flagged while normal descriptions pass', () => 
   assert.equal(result.metrics['Meta Description Length'], 194);
 });
 
+test('missing viewport is a medium-severity mobile usability signal, not an automatic critical blocker', () => {
+  const result = audit({ html: cleanHtml.replace(/\s*<meta name="viewport"[^>]*>/, '') });
+  const issue = result.issues.find((item) => item.id === 'seo-viewport');
+  assert.equal(issue?.severity, 'medium');
+  assert.equal(issue?.readinessBlocker, undefined);
+  assert.equal(calculateReadinessVerdict(result.issues), 'Ready');
+});
+
 test('a missing H1 is reported as a structural signal with calibrated medium severity', () => {
   const result = audit({ html: cleanHtml.replace('<h1>Example product</h1>', '') });
   const issue = result.issues.find((item) => item.id === 'a11y-h1-missing');
@@ -140,6 +148,7 @@ test('readiness verdict is independent of score and explicit blockers always win
   assert.equal(calculateReadinessVerdict([highFinding]), 'Ready');
   assert.equal(calculateReadinessVerdict([{ ...highFinding, readinessBlocker: true }]), 'Not ready');
   assert.equal(calculateReadinessVerdict([{ ...highFinding, severity: 'critical' as const }]), 'Ready');
+  assert.equal(calculateReadinessVerdict([{ ...highFinding, severity: 'high' as const, readinessRelevant: false }]), 'Ready');
 });
 
 test('missing security headers are hardening-only and leave an otherwise healthy HTTPS site Ready', () => {
