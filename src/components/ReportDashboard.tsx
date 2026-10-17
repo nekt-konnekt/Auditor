@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { AuditIssue, AuditReport, Category, Severity } from '../types/audit.ts';
+import { downloadAuditPdf } from '../lib/pdf-export.ts';
 
 interface ReportDashboardProps {
   report: AuditReport;
@@ -176,6 +177,14 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
           >
             Download .md
           </a>
+
+          <button
+            type="button"
+            onClick={() => downloadAuditPdf(report)}
+            className="px-3.5 py-2 text-xs font-semibold text-white bg-teal-700 hover:bg-teal-800 rounded-lg shadow-2xs transition-colors"
+          >
+            Download PDF
+          </button>
         </div>
       </div>
 
