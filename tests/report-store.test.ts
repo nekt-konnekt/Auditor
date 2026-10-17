@@ -38,3 +38,31 @@ test('report sanitization redacts secrets from summary, evidence, and code snipp
   assert.equal(serialized.includes(key.slice(0, 4)), false);
   assert.match(serialized, /\[REDACTED/);
 });
+
+test('report sanitization redacts secrets in AI observations as well as rule findings', () => {
+  const key = 'sk_live_abcdefghijklmnopQRSTUV';
+  const report = {
+    id: 'ai-observation-redaction',
+    createdAt: new Date(0).toISOString(),
+    target: { type: 'code', target: 'bundle.js' },
+    overallScore: 50,
+    verdict: 'Risky',
+    categories: {},
+    summary: 'Observation test',
+    issues: [],
+    aiObservations: [{
+      id: 'ai-observation',
+      category: 'security',
+      severity: 'medium',
+      title: 'Possible credential',
+      description: 'A credential-like value was observed.',
+      remediation: 'Rotate the credential.',
+      evidence: `Found ${key} in a public bundle`,
+    }],
+  } as unknown as AuditReport;
+  const safe = sanitizeAuditReport(report);
+  const serialized = JSON.stringify(safe);
+  assert.equal(serialized.includes(key), false);
+  assert.equal(serialized.includes(key.slice(0, 4)), false);
+  assert.match(serialized, /\\[REDACTED/);
+});
