@@ -101,7 +101,7 @@ test('readiness explanation explicitly distinguishes severity from launch blocke
   };
   const explanation = getReadinessExplanation([highFinding], 'Ready');
   assert.match(explanation, /1 critical\/high-severity finding/);
-  assert.match(explanation, /not explicitly classified as a launch blocker/i);
+  assert.match(explanation, /no finding is explicitly classified as a launch blocker/i);
   assert.doesNotMatch(explanation, /no launch blockers or high-severity findings/i);
 });
 
