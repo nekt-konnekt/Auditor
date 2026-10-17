@@ -114,7 +114,7 @@ async function analyzeWithGemini(prompt: string, apiKey: string, model: string):
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       generationConfig: { maxOutputTokens: 2200, responseMimeType: 'application/json' },
     }),
-    signal: AbortSignal.timeout(45000),
+    signal: AbortSignal.timeout(7000),
   });
   if (!response.ok) throw new Error('Gemini API returned HTTP ' + response.status + ': ' + (await response.text()).slice(0, 300));
   const body = await response.json() as any;
@@ -134,7 +134,7 @@ async function analyzeOpenAICompatible(provider: Provider, prompt: string, apiKe
       response_format: { type: 'json_object' },
       messages: [{ role: 'system', content: schemaHint }, { role: 'user', content: prompt }],
     }),
-    signal: AbortSignal.timeout(45000),
+    signal: AbortSignal.timeout(7000),
   });
   if (!response.ok) throw new Error(provider + ' API returned HTTP ' + response.status + ': ' + (await response.text()).slice(0, 300));
   const body = await response.json() as any;
@@ -166,6 +166,7 @@ function getProviderConfig(provider: Provider): { key?: string; baseUrl: string;
 /**
  * Gemini is the primary provider. AI_FALLBACK_PROVIDERS is an ordered,
  * comma-separated list (default: alibaba). Missing keys are skipped.
+ * Each provider has a short timeout so serverless requests can still return deterministic audit results.
  * If every AI provider fails, deterministic audit results remain available.
  */
 export async function analyzeWithAI(
