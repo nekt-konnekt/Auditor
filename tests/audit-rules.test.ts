@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { calculateAuditScores, calculateReadinessVerdict, getReadinessExplanation, runUrlDeterministicAudit } from '../src/lib/audit-rules.ts';
+import { calculateAuditScores, calculateReadinessVerdict, runUrlDeterministicAudit } from '../src/lib/audit-rules.ts';
+import { getReadinessExplanation } from '../src/types/audit.ts';
 import type { UrlAuditInput } from '../src/lib/audit-rules.ts';
 
 const cleanHtml = `<!doctype html>
