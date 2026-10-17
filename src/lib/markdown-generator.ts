@@ -1,4 +1,4 @@
-import type { AuditReport, Category, Severity } from '../types/audit.ts';
+import { getReadinessExplanation, type AuditReport, type Category, type Severity } from '../types/audit.ts';
 import { getReadinessExplanation } from './audit-rules.ts';
 
 const CATEGORY_NAMES: Record<Category, string> = {
