@@ -1,4 +1,5 @@
 import type { AuditReport, Category, Severity } from '../types/audit.ts';
+import { getReadinessExplanation } from './audit-rules.ts';
 
 const CATEGORY_NAMES: Record<Category, string> = {
   security: 'Security & Headers',
@@ -26,13 +27,7 @@ export function generateAuditMarkdown(report: AuditReport): string {
   const scoreLabel = isHttpErrorResponse ? 'Diagnostic Score (Error Response)' : 'Severity-weighted Diagnostic Score';
   const criticalHighCount = report.issues.filter((issue) => issue.severity === 'critical' || issue.severity === 'high').length;
   const blockerCount = report.issues.filter((issue) => issue.readinessBlocker === true).length;
-  const readinessExplanation = report.verdict === 'Not ready'
-    ? `${blockerCount || 'One or more'} finding(s) are explicitly classified as launch blockers. Resolve those blockers before launch.`
-    : report.verdict === 'Risky'
-    ? 'The readiness rules flagged a condition requiring review. Review the related findings before launch; the numeric score does not override this verdict.'
-    : criticalHighCount > 0
-    ? `No finding is explicitly classified as a launch blocker by the current readiness rules. ${criticalHighCount} critical/high-severity finding(s) remain and should be reviewed; severity and readiness are separate signals.`
-    : 'No finding is explicitly classified as a launch blocker by the current readiness rules. This verdict reflects only the checks performed and is not a guarantee of overall security or quality.';
+  const readinessExplanation = getReadinessExplanation(report.issues, report.verdict);
 
   let md = `# Audit Report: ${targetLabel}
 
