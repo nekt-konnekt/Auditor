@@ -26,27 +26,32 @@ export function redactSensitiveText(value: string): string {
   return redacted;
 }
 
+function sanitizeIssue(issue: AuditReport['issues'][number]): AuditReport['issues'][number] {
+  return {
+    ...issue,
+    title: redactSensitiveText(issue.title),
+    description: redactSensitiveText(issue.description),
+    impact: issue.impact ? redactSensitiveText(issue.impact) : undefined,
+    remediation: redactSensitiveText(issue.remediation),
+    evidence: issue.evidence ? redactSensitiveText(issue.evidence) : undefined,
+    references: issue.references?.map((reference) => ({ title: redactSensitiveText(reference.title), url: redactSensitiveText(reference.url) })),
+    codeSnippet: issue.codeSnippet
+      ? {
+          original: issue.codeSnippet.original ? redactSensitiveText(issue.codeSnippet.original) : undefined,
+          proposed: issue.codeSnippet.proposed ? redactSensitiveText(issue.codeSnippet.proposed) : undefined,
+        }
+      : undefined,
+  };
+}
+
 export function sanitizeAuditReport(report: AuditReport): AuditReport {
   return {
     ...report,
     target: { ...report.target, target: redactSensitiveText(report.target.target) },
     summary: redactSensitiveText(report.summary),
     metrics: report.metrics ? Object.fromEntries(Object.entries(report.metrics).map(([key, value]) => [redactSensitiveText(key), typeof value === 'string' ? redactSensitiveText(value) : value])) : undefined,
-    issues: report.issues.map((issue) => ({
-      ...issue,
-      title: redactSensitiveText(issue.title),
-      description: redactSensitiveText(issue.description),
-      impact: issue.impact ? redactSensitiveText(issue.impact) : undefined,
-      remediation: redactSensitiveText(issue.remediation),
-      evidence: issue.evidence ? redactSensitiveText(issue.evidence) : undefined,
-      references: issue.references?.map((reference) => ({ title: redactSensitiveText(reference.title), url: redactSensitiveText(reference.url) })),
-      codeSnippet: issue.codeSnippet
-        ? {
-            original: issue.codeSnippet.original ? redactSensitiveText(issue.codeSnippet.original) : undefined,
-            proposed: issue.codeSnippet.proposed ? redactSensitiveText(issue.codeSnippet.proposed) : undefined,
-          }
-        : undefined,
-    })),
+    issues: report.issues.map(sanitizeIssue),
+    aiObservations: report.aiObservations?.map(sanitizeIssue),
   };
 }
 
