@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AuditIssue, AuditReport, Category, Severity } from '../types/audit.ts';
+import { AuditIssue, AuditReport, Category, Severity, getReadinessExplanation } from '../types/audit.ts';
 import { downloadAuditPdf } from '../lib/pdf-export.ts';
 import { getReadinessExplanation } from '../lib/audit-rules.ts';
 
