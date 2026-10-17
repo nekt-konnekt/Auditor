@@ -734,26 +734,6 @@ export function calculateReadinessVerdict(issues: AuditIssue[]): ReadinessVerdic
 }
 
 /**
- * Keep the readiness explanation consistent across the workspace and exports.
- * Severity affects diagnostic scores; only explicit blocker policy affects readiness.
- */
-export function getReadinessExplanation(issues: AuditIssue[], verdict: ReadinessVerdict): string {
-  const criticalHighCount = issues.filter((issue) => issue.severity === 'critical' || issue.severity === 'high').length;
-  const blockerCount = issues.filter((issue) => issue.readinessBlocker === true).length;
-
-  if (verdict === 'Not ready') {
-    return `${blockerCount || 'One or more'} finding(s) are explicitly classified as launch blockers. Resolve those blockers before launch.`;
-  }
-  if (verdict === 'Risky') {
-    return 'The readiness rules flagged a condition requiring review. Review the related findings before launch; the numeric score does not override this verdict.';
-  }
-  if (criticalHighCount > 0) {
-    return `No finding is explicitly classified as a launch blocker by the current readiness rules. ${criticalHighCount} critical/high-severity finding(s) remain and should be reviewed; severity and readiness are separate signals.`;
-  }
-  return 'No finding is explicitly classified as a launch blocker by the current readiness rules. This verdict reflects only the checks performed and is not a guarantee of overall security or quality.';
-}
-
-/**
  * Compute normalized category scores and an independent launch-readiness verdict.
  */
 export function calculateAuditScores(issues: AuditIssue[]): {
