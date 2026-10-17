@@ -51,6 +51,15 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
     acc[issue.severity] = (acc[issue.severity] || 0) + 1;
     return acc;
   }, {} as Record<Severity, number>);
+  const criticalHighCount = (severityCounts.critical || 0) + (severityCounts.high || 0);
+  const blockerCount = report.issues.filter((issue) => issue.readinessBlocker === true).length;
+  const readinessDescription = report.verdict === 'Not ready'
+    ? `${blockerCount || 'One or more'} finding(s) are explicitly classified as launch blockers. Resolve those blockers before launch.`
+    : report.verdict === 'Risky'
+    ? 'The readiness rules flagged a condition requiring review. Review the related findings before launch; the numeric score does not override this verdict.'
+    : criticalHighCount > 0
+    ? `No finding is explicitly classified as a launch blocker by the current readiness rules. ${criticalHighCount} critical/high-severity finding(s) remain and should be reviewed; severity and readiness are separate signals.`
+    : 'No finding is explicitly classified as a launch blocker by the current readiness rules. This verdict reflects only the checks performed and is not a guarantee of overall security or quality.';
 
   const isHardeningFinding = (issue: AuditIssue) =>
     ['sec-csp', 'sec-hsts', 'sec-xfo', 'sec-xcto', 'sec-refpolicy'].includes(issue.id);
@@ -208,13 +217,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
           <div>
             <p className="text-xs font-bold uppercase tracking-wider">Launch readiness</p>
             <h2 className="mt-1 text-2xl font-extrabold">{report.verdict}</h2>
-            <p className="mt-1 text-sm">
-              {report.verdict === 'Not ready'
-                ? 'At least one finding is explicitly marked as a launch blocker. Resolve blockers before launch.'
-                : report.verdict === 'Risky'
-                ? 'High-severity findings need review. The numeric score does not override this verdict.'
-                : 'No launch blockers or high-severity findings were identified by the checks performed.'}
-            </p>
+            <p className="mt-1 text-sm">{readinessDescription}</p>
           </div>
           <span className="text-xs font-mono font-semibold">Verdict is independent of score</span>
         </div>
@@ -331,7 +334,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
         <p className="text-sm text-slate-700 leading-relaxed">
           {report.summary}
         </p>
-        <p className="mt-3 text-xs leading-relaxed text-slate-500">Not performed: browser rendering tests, Core Web Vitals or real-user performance measurement, authenticated-flow checks, and audits of other routes. This report evaluates the listed rules against the submitted URL's fetched response; it is not a guarantee of overall security or accessibility.</p>
+        <p className="mt-3 text-xs leading-relaxed text-slate-500">Not performed: browser rendering tests, Core Web Vitals or real-user performance measurement, authenticated-flow checks, and comprehensive audits of all routes. The Performance score reflects the initial HTML-fetch rule(s) only; it is not a browser-performance score. This report evaluates listed rules against fetched responses and is not a guarantee of overall security or accessibility.</p>
 
         {report.metrics && Object.keys(report.metrics).length > 0 && (
           <div className="mt-5 pt-4 border-t border-slate-100 flex flex-wrap gap-x-6 gap-y-2 text-xs text-slate-600 font-mono">
