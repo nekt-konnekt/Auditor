@@ -24,6 +24,15 @@ export function generateAuditMarkdown(report: AuditReport): string {
     && typeof report.target.statusCode === 'number'
     && report.target.statusCode >= 400;
   const scoreLabel = isHttpErrorResponse ? 'Diagnostic Score (Error Response)' : 'Severity-weighted Diagnostic Score';
+  const criticalHighCount = report.issues.filter((issue) => issue.severity === 'critical' || issue.severity === 'high').length;
+  const blockerCount = report.issues.filter((issue) => issue.readinessBlocker === true).length;
+  const readinessExplanation = report.verdict === 'Not ready'
+    ? `${blockerCount || 'One or more'} finding(s) are explicitly classified as launch blockers. Resolve those blockers before launch.`
+    : report.verdict === 'Risky'
+    ? 'The readiness rules flagged a condition requiring review. Review the related findings before launch; the numeric score does not override this verdict.'
+    : criticalHighCount > 0
+    ? `No finding is explicitly classified as a launch blocker by the current readiness rules. ${criticalHighCount} critical/high-severity finding(s) remain and should be reviewed; severity and readiness are separate signals.`
+    : 'No finding is explicitly classified as a launch blocker by the current readiness rules. This verdict reflects only the checks performed and is not a guarantee of overall security or quality.';
 
   let md = `# Audit Report: ${targetLabel}
 
@@ -44,7 +53,11 @@ ${isHttpErrorResponse ? `\n> **Target returned HTTP ${report.target.statusCode}.
 
 ${report.summary}
 
-> Coverage limits: Auditor checks the submitted URL and may crawl a limited number of additional same-origin routes when robots.txt permits. Browser rendering tests, Core Web Vitals or real-user performance measurement, and authenticated-flow checks are not performed. This report is not a guarantee of overall security or accessibility.
+**Readiness interpretation:** ${readinessExplanation}
+
+**Severity review:** ${criticalHighCount} critical/high-severity finding(s); ${blockerCount} finding(s) explicitly marked as launch blockers. These counts answer different questions: severity contributes to diagnostic scoring, while the readiness verdict follows explicit blocker rules.
+
+> Coverage limits: Auditor checks the submitted URL and may crawl a limited number of additional same-origin routes when robots.txt permits. The Performance score reflects initial HTML-fetch checks only. Browser rendering tests, Core Web Vitals or real-user performance measurement, and authenticated-flow checks are not performed. This report is not a guarantee of overall security or accessibility.
 
 ---
 
