@@ -44,7 +44,7 @@ ${isHttpErrorResponse ? `\n> **Target returned HTTP ${report.target.statusCode}.
 
 ${report.summary}
 
-> Not performed: browser rendering tests, Core Web Vitals or real-user performance measurement, authenticated-flow checks, and audits of other routes. This report evaluates the listed rules against the submitted URL's fetched response; it is not a guarantee of overall security or accessibility.
+> Coverage limits: Auditor checks the submitted URL and may crawl a limited number of additional same-origin routes when robots.txt permits. Browser rendering tests, Core Web Vitals or real-user performance measurement, and authenticated-flow checks are not performed. This report is not a guarantee of overall security or accessibility.
 
 ---
 
