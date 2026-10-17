@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { calculateAuditScores, calculateReadinessVerdict, runUrlDeterministicAudit } from '../src/lib/audit-rules.ts';
+import { calculateAuditScores, calculateReadinessVerdict, getReadinessExplanation, runUrlDeterministicAudit } from '../src/lib/audit-rules.ts';
 import type { UrlAuditInput } from '../src/lib/audit-rules.ts';
 
 const cleanHtml = `<!doctype html>
@@ -87,6 +87,21 @@ test('long meta descriptions are flagged while normal descriptions pass', () => 
   const result = audit({ html });
   assert.equal(result.issues.find((issue) => issue.id === 'seo-desc-length')?.severity, 'low');
   assert.equal(result.metrics['Meta Description Length'], 194);
+});
+
+test('readiness explanation explicitly distinguishes severity from launch blockers', () => {
+  const highFinding = {
+    id: 'seo-example',
+    category: 'seo' as const,
+    severity: 'high' as const,
+    title: 'SEO issue',
+    description: 'A high severity SEO finding.',
+    remediation: 'Review it.',
+  };
+  const explanation = getReadinessExplanation([highFinding], 'Ready');
+  assert.match(explanation, /1 critical\/high-severity finding/);
+  assert.match(explanation, /not explicitly classified as a launch blocker/i);
+  assert.doesNotMatch(explanation, /no launch blockers or high-severity findings/i);
 });
 
 test('missing viewport is a medium-severity mobile usability signal, not an automatic critical blocker', () => {
