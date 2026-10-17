@@ -37,6 +37,7 @@ export default function App() {
   const [activeReport, setActiveReport] = useState<AuditReport | null>(null);
   const [historyReports, setHistoryReports] = useState<AuditReport[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [auditError, setAuditError] = useState<string | null>(null);
   const [isMarkdownModalOpen, setIsMarkdownModalOpen] = useState(false);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
 
@@ -135,6 +136,7 @@ export default function App() {
 
   const handleStartAudit = async (payload: AuditRequestPayload) => {
     clearRescanState();
+    setAuditError(null);
     setIsLoading(true);
     try {
       const response = await fetch('/api/audit', {
@@ -160,6 +162,8 @@ export default function App() {
       url.searchParams.set('auditId', report.id);
       window.history.pushState({}, '', url.toString());
       window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch (error) {
+      setAuditError(error instanceof Error ? error.message : 'Audit failed. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -350,7 +354,10 @@ export default function App() {
             {batchResults.length > 0 && <div className="mt-8 bg-white border border-slate-200 rounded-xl overflow-hidden"><div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between gap-4"><h2 className="font-bold text-slate-900">Batch results</h2><span className="text-sm text-slate-500">{batchResults.filter((item) => item.report).length} of {batchResults.length} completed</span></div><div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-5 py-3">URL</th><th className="px-5 py-3">Verdict</th><th className="px-5 py-3">Score</th><th className="px-5 py-3">Worst finding</th><th className="px-5 py-3">Status</th></tr></thead><tbody className="divide-y divide-slate-100">{[...batchResults].sort((a, b) => { const rank = (item: typeof a) => item.report?.verdict === 'Not ready' ? 0 : item.report?.verdict === 'Risky' ? 1 : item.report?.verdict === 'Ready' ? 2 : 3; return rank(a) - rank(b) || a.index - b.index; }).map((item) => { const worst = item.report?.issues.filter((issue) => issue.severity !== 'passed').sort((a, b) => severityRank[a.severity] - severityRank[b.severity])[0]; return <tr key={item.index} className="align-top"><td className="px-5 py-4 max-w-xs break-all font-mono text-xs">{item.target}</td><td className="px-5 py-4 font-semibold">{item.report?.verdict || '—'}</td><td className="px-5 py-4 tabular-nums">{item.report ? item.report.overallScore : '—'}</td><td className="px-5 py-4">{worst?.title || (item.report ? 'No failing findings' : item.error || 'Audit failed')}</td><td className="px-5 py-4"><span className={item.report ? 'text-emerald-700' : 'text-rose-700'}>{item.report ? 'Complete' : 'Failed'}</span>{item.report && <button onClick={() => { clearRescanState(); setActiveReport(item.report!); setCurrentView('report'); const url = new URL(window.location.href); url.searchParams.set('auditId', item.report!.id); window.history.pushState({}, '', url.toString()); }} className="ml-3 text-emerald-700 underline underline-offset-2">Open report</button>}</td></tr>; })}</tbody></table></div></div>}
           </section>
         ) : currentView === 'form' || !activeReport ? (
-          <AuditForm onStartAudit={handleStartAudit} isLoading={isLoading} />
+          <>
+            {auditError && <p role="alert" className="mx-auto mt-6 max-w-3xl rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">Audit could not be completed: {auditError}</p>}
+            <AuditForm onStartAudit={handleStartAudit} isLoading={isLoading} />
+          </>
         ) : (
           <>
           <ReportDashboard
