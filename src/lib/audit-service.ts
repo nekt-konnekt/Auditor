@@ -44,9 +44,13 @@ function canonicalFindingKey(issue: AuditReport['issues'][number]): string {
     [/cache.?control|caching directives/, 'performance:cache-control'],
   ];
   const matched = rules.find(([pattern]) => pattern.test(text));
-  if (matched) return matched[1];
-  // IDs are more stable than generated prose for all other rules.
-  return issue.id.replace(/-route-[a-z0-9_-]+$/i, '');
+  // Keep route identity in the canonical key: identical findings on separate
+  // routes are separate observations and must not be collapsed together.
+  const routeSuffix = issue.id.match(/-route-[a-z0-9_-]+$/i)?.[0] ?? '';
+  if (matched) return `${matched[1]}${routeSuffix}`;
+  // IDs are more stable than generated prose for all other rules. Route IDs
+  // already encode their path, so preserve the full ID here as well.
+  return issue.id;
 }
 
 function deduplicateFindings(issues: AuditReport['issues']): AuditReport['issues'] {
