@@ -41,7 +41,7 @@ function issueHtml(issue: AuditIssue): string {
  * lets the user save a high-quality PDF without changing report data or scores.
  */
 export function downloadAuditPdf(report: AuditReport): void {
-  const printWindow = window.open('', '_blank', 'noopener,noreferrer');
+  const printWindow = window.open('', '_blank');
   if (!printWindow) {
     window.alert('The PDF report window was blocked. Allow pop-ups for Auditor, then try again.');
     return;
