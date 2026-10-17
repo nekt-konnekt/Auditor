@@ -5,6 +5,8 @@ on:
     branches:
       - main
       - audit/security-and-deploy-readiness
+      - upgrade/persistence-and-readiness-checks
+      - integration/vercel-neon-ready
   pull_request:
     branches:
       - main

@@ -5,12 +5,16 @@ interface ReportDashboardProps {
   report: AuditReport;
   onBackToStudio: () => void;
   onOpenMarkdown: () => void;
+  onRescan?: () => void;
+  rescanLoading?: boolean;
 }
 
 export const ReportDashboard: React.FC<ReportDashboardProps> = ({
   report,
   onBackToStudio,
   onOpenMarkdown,
+  onRescan,
+  rescanLoading = false,
 }) => {
   const [selectedSeverity, setSelectedSeverity] = useState<string>('all');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -47,7 +51,12 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
     return acc;
   }, {} as Record<Severity, number>);
 
+  const isHardeningFinding = (issue: AuditIssue) =>
+    ['sec-csp', 'sec-hsts', 'sec-xfo', 'sec-xcto', 'sec-refpolicy'].includes(issue.id);
+
+  const hardeningFindings = report.issues.filter(isHardeningFinding);
   const filteredIssues = report.issues.filter((issue) => {
+    if (isHardeningFinding(issue)) return false;
     if (selectedSeverity !== 'all' && issue.severity !== selectedSeverity) {
       return false;
     }
@@ -144,7 +153,8 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
         </div>
 
         {/* Action Controls */}
-        <div className="flex items-center gap-2.5 shrink-0">
+        <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+          {report.target.type === 'url' && onRescan && <button onClick={onRescan} disabled={rescanLoading} className="px-3.5 py-2 text-xs font-semibold text-white bg-emerald-700 hover:bg-emerald-800 rounded-lg disabled:opacity-60">{rescanLoading ? 'Re-scanning…' : 'Re-scan & compare'}</button>}
           <button
             onClick={handleShareLink}
             className="px-3.5 py-2 text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg shadow-2xs transition-colors"
@@ -470,6 +480,28 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Security-header hardening is visible but never drives launch readiness. */}
+      {hardeningFindings.length > 0 && (
+        <section aria-label="Hardening tips" className="space-y-3">
+          <div>
+            <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Hardening tips</h2>
+            <p className="mt-1 text-xs text-slate-500">Security-header improvements affect the security score, but do not change the launch-readiness verdict.</p>
+          </div>
+          {hardeningFindings.map((issue) => (
+            <article key={issue.id} className="rounded-xl border border-slate-200 bg-white p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold text-slate-500">{issue.severity.toUpperCase()} · Security hardening</p>
+                  <h3 className="mt-1 text-sm font-bold text-slate-900">{issue.title}</h3>
+                  <p className="mt-1 text-xs leading-relaxed text-slate-600">{issue.description}</p>
+                  <p className="mt-2 text-xs leading-relaxed text-slate-700"><strong>Recommended action:</strong> {issue.remediation}</p>
+                </div>
+              </div>
+            </article>
+          ))}
+        </section>
+      )}
 
       {/* Issues List */}
       <div className="space-y-4">

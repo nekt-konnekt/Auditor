@@ -1,0 +1,216 @@
+import type { AuditIssue } from '../types/audit.ts';
+
+export interface AiAuditAnalysis {
+  summary: string;
+  additionalIssues: AuditIssue[];
+}
+
+type AuditKind = 'url' | 'code';
+type Provider = 'gemini' | 'alibaba' | 'groq' | 'openrouter' | 'openai-compatible';
+
+const validCategories = ['security', 'seo', 'accessibility', 'performance', 'quality'];
+const validSeverities = ['critical', 'high', 'medium', 'low', 'passed'];
+const fallbackSummary = (type: AuditKind, target: string, _provider: string) =>
+  type === 'url'
+    ? 'Audit conducted on ' + target + '. Deterministic checks evaluated HTTP headers, SEO metadata, markup accessibility, and response timing. AI enrichment was unavailable for this run; the findings below are based on deterministic checks.'
+    : 'Static source code audit performed for ' + target + '. Deterministic checks scanned common patterns. AI enrichment was unavailable for this run; the findings below are based on deterministic checks.';
+
+export function normalizeFindingText(value: string): string {
+  return value.normalize('NFKC').toLowerCase().replace(/[\u2010-\u2015\u2212]/g, '-').replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+const knownRuleTerms: Array<[RegExp, string[]]> = [
+  [/content.?security.?policy|\bcsp\b/i, ['content security policy', 'csp']],
+  [/strict.?transport.?security|\bhsts\b/i, ['strict transport security', 'hsts']],
+  [/x.?frame.?options|clickjack|frame.?ancestors/i, ['x frame options', 'clickjacking', 'frame ancestors']],
+  [/x.?content.?type.?options|mime.?type.?sniff/i, ['x content type options', 'nosniff', 'mime type sniff']],
+  [/referrer.?policy|referrer header/i, ['referrer policy']],
+  [/meta.?description/i, ['meta description']],
+  [/missing.*h1|primary heading|heading element/i, ['h1', 'primary heading', 'heading structure']],
+];
+
+export function overlapsRuleFinding(candidate: { id?: string; title?: string; description?: string }, rules: Array<{ id: string; title: string }>): boolean {
+  const candidateText = normalizeFindingText([candidate.id, candidate.title, candidate.description].filter(Boolean).join(' '));
+  const candidateTokens = new Set(candidateText.split(' '));
+  return rules.some((rule) => {
+    const ruleText = normalizeFindingText(rule.id + ' ' + rule.title);
+    if (normalizeFindingText(rule.id) === normalizeFindingText(candidate.id || '') || ruleText === normalizeFindingText(candidate.title || '')) return true;
+    if (ruleText.split(' ').some((term) => term.length > 4 && candidateTokens.has(term))) return true;
+    const terms = knownRuleTerms.find(([pattern]) => pattern.test(rule.id + ' ' + rule.title))?.[1] || [];
+    return terms.some((term) => candidateText.includes(normalizeFindingText(term)));
+  });
+}
+
+function buildPrompt(type: AuditKind, target: string, content: string, meta: Record<string, any>): string {
+  const knownRules = Array.isArray(meta.ruleBasedFindings)
+    ? meta.ruleBasedFindings
+        .filter((item: any) => item && typeof item.id === 'string' && typeof item.title === 'string')
+        .map((item: any) => `- ${item.id}: ${item.title}`)
+        .join('\n')
+    : '';
+  const duplicateGuard = knownRules
+    ? '\nDeterministic findings already recorded (do not repeat or paraphrase these as AI findings):\n' + knownRules
+    : '';
+  if (type === 'url') {
+    return 'You are an expert web application security, SEO, accessibility, and performance auditor. Analyze this website inspection snapshot.\n' +
+      'URL: ' + target + '\nHTTP status: ' + (meta.statusCode || 200) +
+      '\nResponse time: ' + (meta.responseTimeMs || 0) + ' ms\nObserved headers: ' +
+      JSON.stringify(meta.headers || {}) + '\nHTML snippet / structure:\n' + content.slice(0, 3000) +
+      '\nIdentify only evidence-based, actionable issues. Do not infer vulnerabilities unsupported by this snapshot. Consider security headers, CORS, SEO metadata, and accessibility.' + duplicateGuard;
+  }
+  return 'You are an expert software security auditor and static analysis specialist. Analyze source code (' +
+    (meta.language || 'text') + '), file: ' + (meta.filename || target) + '.\nSource:\n' +
+    content.slice(0, 4000) +
+    '\nLook for evidence-based vulnerabilities and quality issues including OWASP Top 10, CWE patterns, logic errors, input validation, authentication/authorization gaps, and unsafe execution. Do not claim vulnerabilities without evidence. Give actionable remediation.' + duplicateGuard;
+}
+
+const schemaHint = 'Return only one compact, valid JSON object with shape: {\"summary\":\"2-4 sentence executive summary\",\"issues\":[{\"category\":\"security|seo|accessibility|performance|quality\",\"severity\":\"critical|high|medium|low|passed\",\"title\":\"short title\",\"description\":\"evidence-based explanation\",\"impact\":\"real-world impact\",\"remediation\":\"concrete fix\",\"originalCode\":\"optional short evidence snippet\",\"proposedFix\":\"optional short replacement\"}]}. Return at most 8 issues, keep fields concise, and do not use Markdown fences or text outside the JSON. Use an empty issues array when no additional findings are justified.';
+
+export function parseAnalysis(raw: string, type: AuditKind, ruleBasedFindings: Array<{ id: string; title: string }> = []): AiAuditAnalysis {
+  // Providers occasionally wrap otherwise valid JSON in Markdown fences or add a short preamble.
+  // Extract the outermost object before parsing; malformed/truncated JSON still fails safely.
+  const trimmed = raw.trim();
+  const unfenced = trimmed.replace(/^\x60{3}(?:json)?\s*/i, '').replace(/\s*\x60{3}\s*$/, '');
+  const start = unfenced.indexOf('{');
+  const end = unfenced.lastIndexOf('}');
+  const jsonText = start >= 0 && end > start ? unfenced.slice(start, end + 1) : unfenced;
+  const parsed = JSON.parse(jsonText);
+  const rawIssues = Array.isArray(parsed.issues) ? parsed.issues : [];
+  const additionalIssues: AuditIssue[] = rawIssues
+    .filter((item: any) => item && typeof item.title === 'string' && typeof item.description === 'string' && !overlapsRuleFinding(item, ruleBasedFindings))
+    .slice(0, 30)
+    .map((item: any, idx: number) => {
+      const category = validCategories.includes(item.category) ? item.category : (type === 'url' ? 'seo' : 'security');
+      const severity = validSeverities.includes(item.severity) ? item.severity : 'medium';
+      return {
+        id: 'ai-finding-' + (idx + 1) + '-' + Date.now().toString(36),
+        category,
+        severity,
+        title: item.title.slice(0, 180),
+        description: item.description.slice(0, 3000),
+        impact: typeof item.impact === 'string' ? item.impact.slice(0, 1500) : undefined,
+        remediation: typeof item.remediation === 'string' ? item.remediation.slice(0, 3000) : 'Review the evidence and apply an appropriate fix.',
+        codeSnippet: item.originalCode || item.proposedFix ? {
+          original: typeof item.originalCode === 'string' ? item.originalCode.slice(0, 1500) : undefined,
+          proposed: typeof item.proposedFix === 'string' ? item.proposedFix.slice(0, 1500) : undefined,
+        } : undefined,
+      };
+    });
+  return {
+    summary: typeof parsed.summary === 'string' && parsed.summary.trim()
+      ? parsed.summary.slice(0, 3000)
+      : 'Audit completed. Review the findings and evidence below.',
+    additionalIssues,
+  };
+}
+
+async function analyzeWithGemini(prompt: string, apiKey: string, model: string): Promise<string> {
+  const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' +
+    encodeURIComponent(model) + ':generateContent?key=' + encodeURIComponent(apiKey), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: schemaHint }] },
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      generationConfig: { maxOutputTokens: 2200, responseMimeType: 'application/json' },
+    }),
+    signal: AbortSignal.timeout(45000),
+  });
+  if (!response.ok) throw new Error('Gemini API returned HTTP ' + response.status + ': ' + (await response.text()).slice(0, 300));
+  const body = await response.json() as any;
+  const text = body.candidates?.[0]?.content?.parts?.map((p: any) => p.text || '').join('');
+  if (!text) throw new Error('Gemini returned an empty response.');
+  return text;
+}
+
+async function analyzeOpenAICompatible(provider: Provider, prompt: string, apiKey: string, baseUrl: string, model: string): Promise<string> {
+  const response = await fetch(baseUrl.replace(/\/+$/, '') + '/chat/completions', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model,
+      temperature: 0.1,
+      max_tokens: 4000,
+      response_format: { type: 'json_object' },
+      messages: [{ role: 'system', content: schemaHint }, { role: 'user', content: prompt }],
+    }),
+    signal: AbortSignal.timeout(45000),
+  });
+  if (!response.ok) throw new Error(provider + ' API returned HTTP ' + response.status + ': ' + (await response.text()).slice(0, 300));
+  const body = await response.json() as any;
+  const text = body.choices?.[0]?.message?.content;
+  if (typeof text !== 'string' || !text) throw new Error(provider + ' returned an empty response.');
+  return text;
+}
+
+function getProviderConfig(provider: Provider): { key?: string; baseUrl: string; model: string } {
+  if (provider === 'gemini') {
+    return { key: process.env.GEMINI_API_KEY, baseUrl: '', model: process.env.GEMINI_MODEL || 'gemini-3.8-flash' };
+  }
+  if (provider === 'alibaba') {
+    return {
+      key: process.env.DASHSCOPE_API_KEY || (process.env.AI_PROVIDER === 'alibaba' ? process.env.AI_API_KEY : undefined),
+      baseUrl: process.env.DASHSCOPE_BASE_URL || process.env.AI_BASE_URL || 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
+      model: process.env.DASHSCOPE_MODEL || process.env.AI_MODEL || 'qwen-plus',
+    };
+  }
+  if (provider === 'groq') {
+    return { key: process.env.GROQ_API_KEY, baseUrl: 'https://api.groq.com/openai/v1', model: process.env.GROQ_MODEL || '' };
+  }
+  if (provider === 'openrouter') {
+    return { key: process.env.OPENROUTER_API_KEY, baseUrl: 'https://openrouter.ai/api/v1', model: process.env.OPENROUTER_MODEL || '' };
+  }
+  return { key: process.env.AI_API_KEY, baseUrl: process.env.AI_BASE_URL || '', model: process.env.AI_MODEL || '' };
+}
+
+/**
+ * Gemini is the primary provider. AI_FALLBACK_PROVIDERS is an ordered,
+ * comma-separated list (default: alibaba). Missing keys are skipped.
+ * If every AI provider fails, deterministic audit results remain available.
+ */
+export async function analyzeWithAI(
+  type: AuditKind,
+  target: string,
+  contentSnippet: string,
+  contextMeta: Record<string, any>,
+): Promise<AiAuditAnalysis> {
+  const prompt = buildPrompt(type, target, contentSnippet, contextMeta);
+  const primary = (process.env.AI_PRIMARY_PROVIDER || 'gemini').toLowerCase() as Provider;
+  const fallbacks = (process.env.AI_FALLBACK_PROVIDERS || 'alibaba')
+    .split(',').map((p) => p.trim().toLowerCase()).filter(Boolean) as Provider[];
+  const providers = [...new Set<Provider>([primary, ...fallbacks])];
+  const supported: Provider[] = ['gemini', 'alibaba', 'groq', 'openrouter', 'openai-compatible'];
+  const errors: string[] = [];
+
+  for (const provider of providers) {
+    if (!supported.includes(provider)) {
+      errors.push('Unsupported provider: ' + provider);
+      continue;
+    }
+    const config = getProviderConfig(provider);
+    if (!config.key) {
+      console.warn('Auditor AI provider skipped: missing API key for', provider);
+      continue;
+    }
+    if (provider !== 'gemini' && (!config.baseUrl || !config.model)) {
+      console.warn('Auditor AI provider skipped: missing base URL or model for', provider);
+      continue;
+    }
+    try {
+      const raw = provider === 'gemini'
+        ? await analyzeWithGemini(prompt, config.key, config.model)
+        : await analyzeOpenAICompatible(provider, prompt, config.key, config.baseUrl, config.model);
+      return parseAnalysis(raw, type, Array.isArray(contextMeta.ruleBasedFindings) ? contextMeta.ruleBasedFindings : []);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'unknown error';
+      errors.push(provider + ': ' + message);
+      console.warn('Auditor AI provider failed; trying next configured provider:', provider, message);
+    }
+  }
+
+  if (errors.length) console.warn('All configured Auditor AI providers failed:', errors.join(' | '));
+  return { summary: fallbackSummary(type, target, primary), additionalIssues: [] };
+}
+
+/** Compatibility export for older imports. */
+export { analyzeWithAI as analyzeWithAlibabaCloud };
