@@ -237,7 +237,7 @@ app.get('/api/report/:id/compare/:previousId', async (req, res) => {
   if (current.target.type !== previous.target.type || current.target.target.replace(/\/$/, '') !== previous.target.target.replace(/\/$/, '')) {
     return res.status(400).json({ error: 'Reports must target the same URL or code file.' });
   }
-  const signature = (issue: (typeof current.issues)[number]) => `${issue.category}|${issue.title.toLowerCase().trim()}`;
+  const signature = (issue: (typeof current.issues)[number]) => `${issue.category}|${issue.id}`;
   const previousIssues = new Map(previous.issues.map((issue) => [signature(issue), issue]));
   const currentIssues = new Map(current.issues.map((issue) => [signature(issue), issue]));
   const added = current.issues.filter((issue) => !previousIssues.has(signature(issue)));
