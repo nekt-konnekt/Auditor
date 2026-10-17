@@ -1,5 +1,4 @@
 import { getReadinessExplanation, type AuditReport, type AuditIssue, type Category } from '../types/audit.ts';
-import { getReadinessExplanation } from './audit-rules.ts';
 
 const CATEGORY_LABELS: Record<Category, string> = {
   security: 'Security & Headers',
