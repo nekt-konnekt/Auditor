@@ -64,5 +64,5 @@ test('report sanitization redacts secrets in AI observations as well as rule fin
   const serialized = JSON.stringify(safe);
   assert.equal(serialized.includes(key), false);
   assert.equal(serialized.includes(key.slice(0, 4)), false);
-  assert.match(serialized, /\\[REDACTED/);
+  assert.match(serialized, /\[REDACTED/);
 });
