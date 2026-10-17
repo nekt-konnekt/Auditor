@@ -326,11 +326,11 @@ export function runUrlDeterministicAudit(input: UrlAuditInput): {
     issues.push({
       id: 'seo-viewport',
       category: 'seo',
-      severity: 'critical',
+      severity: 'medium',
       title: 'Missing Viewport Meta Tag',
-      description: 'The page does not declare a mobile viewport tag.',
-      impact: 'Mobile browsers will render the desktop version in 980px zoom mode, failing mobile-friendliness audits.',
-      remediation: 'Add `<meta name="viewport" content="width=device-width, initial-scale=1.0">`.',
+      description: 'The fetched HTML does not declare a mobile viewport tag. This can impair mobile layout, but does not by itself establish a launch blocker.',
+      impact: 'Some mobile browsers may use a wide default layout viewport, making content appear zoomed out or difficult to read.',
+      remediation: 'Add `<meta name="viewport" content="width=device-width, initial-scale=1.0">` and verify the page at mobile viewport sizes.',
     });
   } else {
     issues.push({
@@ -451,6 +451,7 @@ export function runUrlDeterministicAudit(input: UrlAuditInput): {
   metrics['External Stylesheets'] = styleTags;
   metrics['HTML Fetch Duration'] = `${input.responseTimeMs} ms`;
   metrics['Browser Runtime Checks'] = 'Not performed';
+  metrics['Performance Measurement Scope'] = 'Initial HTML fetch only; browser rendering, Core Web Vitals, and real-user performance were not measured';
   metrics['Route Coverage'] = 'Submitted URL only';
   metrics['HTTP Status'] = input.statusCode;
   metrics['HTTP Status Class'] = `${Math.floor(input.statusCode / 100)}xx`;
