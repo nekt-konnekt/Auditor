@@ -209,7 +209,11 @@ export async function executeAudit(payload: AuditRequestPayload): Promise<AuditR
   if (code.length > 200_000) throw new Error('Source code is limited to 200,000 characters per audit.');
 
   const { issues: deterministicIssues, metrics } = runCodeDeterministicAudit({ code, language, filename });
-  const aiResult = await analyzeWithAI('code', filename, redactSensitiveText(code), {\n    language,\n    filename,\n    ruleBasedFindings: deterministicIssues.map(({ id, title }) => ({ id, title })),\n  });
+  const aiResult = await analyzeWithAI('code', filename, redactSensitiveText(code), {
+    language,
+    filename,
+    ruleBasedFindings: deterministicIssues.map(({ id, title }) => ({ id, title })),
+  });
   const allIssues = deduplicateFindings(deterministicIssues);
   const aiObservations = aiResult.additionalIssues;
   const { overallScore, categories, verdict } = calculateAuditScores(allIssues);
