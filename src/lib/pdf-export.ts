@@ -1,4 +1,5 @@
 import type { AuditReport, AuditIssue, Category } from '../types/audit.ts';
+import { getReadinessExplanation } from './audit-rules.ts';
 
 const CATEGORY_LABELS: Record<Category, string> = {
   security: 'Security & Headers',
@@ -60,13 +61,7 @@ export function downloadAuditPdf(report: AuditReport): void {
   const findings = report.issues.filter(issue => !hardeningIds.includes(issue.id));
   const criticalHighCount = report.issues.filter(issue => issue.severity === 'critical' || issue.severity === 'high').length;
   const blockerCount = report.issues.filter(issue => issue.readinessBlocker === true).length;
-  const readinessExplanation = report.verdict === 'Not ready'
-    ? `${blockerCount || 'One or more'} finding(s) are explicitly classified as launch blockers. Resolve those blockers before launch.`
-    : report.verdict === 'Risky'
-    ? 'The readiness rules flagged a condition requiring review. Review the related findings before launch; the numeric score does not override this verdict.'
-    : criticalHighCount > 0
-    ? `No finding is explicitly classified as a launch blocker by the current readiness rules. ${criticalHighCount} critical/high-severity finding(s) remain and should be reviewed; severity and readiness are separate signals.`
-    : 'No finding is explicitly classified as a launch blocker by the current readiness rules. This verdict reflects only the checks performed and is not a guarantee of overall security or quality.';
+  const readinessExplanation = getReadinessExplanation(report.issues, report.verdict);
   const metrics = report.metrics && Object.keys(report.metrics).length
     ? `<div class="metrics">${Object.entries(report.metrics).map(([key, value]) => `<span><b>${escapeHtml(key)}:</b> ${escapeHtml(value)}</span>`).join('')}</div>`
     : '';
