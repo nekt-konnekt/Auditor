@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { AuditIssue, AuditReport, Category, Severity } from '../types/audit.ts';
 import { downloadAuditPdf } from '../lib/pdf-export.ts';
+import { getReadinessExplanation } from '../lib/audit-rules.ts';
 
 interface ReportDashboardProps {
   report: AuditReport;
@@ -51,15 +52,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
     acc[issue.severity] = (acc[issue.severity] || 0) + 1;
     return acc;
   }, {} as Record<Severity, number>);
-  const criticalHighCount = (severityCounts.critical || 0) + (severityCounts.high || 0);
-  const blockerCount = report.issues.filter((issue) => issue.readinessBlocker === true).length;
-  const readinessDescription = report.verdict === 'Not ready'
-    ? `${blockerCount || 'One or more'} finding(s) are explicitly classified as launch blockers. Resolve those blockers before launch.`
-    : report.verdict === 'Risky'
-    ? 'The readiness rules flagged a condition requiring review. Review the related findings before launch; the numeric score does not override this verdict.'
-    : criticalHighCount > 0
-    ? `No finding is explicitly classified as a launch blocker by the current readiness rules. ${criticalHighCount} critical/high-severity finding(s) remain and should be reviewed; severity and readiness are separate signals.`
-    : 'No finding is explicitly classified as a launch blocker by the current readiness rules. This verdict reflects only the checks performed and is not a guarantee of overall security or quality.';
+  const readinessDescription = getReadinessExplanation(report.issues, report.verdict);
 
   const isHardeningFinding = (issue: AuditIssue) =>
     ['sec-csp', 'sec-hsts', 'sec-xfo', 'sec-xcto', 'sec-refpolicy'].includes(issue.id);
