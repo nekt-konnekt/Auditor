@@ -1,4 +1,4 @@
-import type { AuditReport, Category, Severity } from '../types/audit.ts';
+import { getReadinessExplanation, type AuditReport, type Category, type Severity } from '../types/audit.ts';
 
 const CATEGORY_NAMES: Record<Category, string> = {
   security: 'Security & Headers',
@@ -24,6 +24,9 @@ export function generateAuditMarkdown(report: AuditReport): string {
     && typeof report.target.statusCode === 'number'
     && report.target.statusCode >= 400;
   const scoreLabel = isHttpErrorResponse ? 'Diagnostic Score (Error Response)' : 'Severity-weighted Diagnostic Score';
+  const criticalHighCount = report.issues.filter((issue) => issue.severity === 'critical' || issue.severity === 'high').length;
+  const blockerCount = report.issues.filter((issue) => issue.readinessBlocker === true).length;
+  const readinessExplanation = getReadinessExplanation(report.issues, report.verdict);
 
   let md = `# Audit Report: ${targetLabel}
 
@@ -44,7 +47,11 @@ ${isHttpErrorResponse ? `\n> **Target returned HTTP ${report.target.statusCode}.
 
 ${report.summary}
 
-> Coverage limits: Auditor checks the submitted URL and may crawl a limited number of additional same-origin routes when robots.txt permits. Browser rendering tests, Core Web Vitals or real-user performance measurement, and authenticated-flow checks are not performed. This report is not a guarantee of overall security or accessibility.
+**Readiness interpretation:** ${readinessExplanation}
+
+**Severity review:** ${criticalHighCount} critical/high-severity finding(s); ${blockerCount} finding(s) explicitly marked as launch blockers. These counts answer different questions: severity contributes to diagnostic scoring, while the readiness verdict follows explicit blocker rules.
+
+> Coverage limits: Auditor checks the submitted URL and may crawl a limited number of additional same-origin routes when robots.txt permits. The Performance score reflects initial HTML-fetch checks only. Browser rendering tests, Core Web Vitals or real-user performance measurement, and authenticated-flow checks are not performed. This report is not a guarantee of overall security or accessibility.
 
 ---
 

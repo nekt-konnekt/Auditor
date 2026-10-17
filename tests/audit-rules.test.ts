@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { calculateAuditScores, calculateReadinessVerdict, runUrlDeterministicAudit } from '../src/lib/audit-rules.ts';
+import { getReadinessExplanation } from '../src/types/audit.ts';
 import type { UrlAuditInput } from '../src/lib/audit-rules.ts';
 
 const cleanHtml = `<!doctype html>
@@ -89,6 +90,29 @@ test('long meta descriptions are flagged while normal descriptions pass', () => 
   assert.equal(result.metrics['Meta Description Length'], 194);
 });
 
+test('readiness explanation explicitly distinguishes severity from launch blockers', () => {
+  const highFinding = {
+    id: 'seo-example',
+    category: 'seo' as const,
+    severity: 'high' as const,
+    title: 'SEO issue',
+    description: 'A high severity SEO finding.',
+    remediation: 'Review it.',
+  };
+  const explanation = getReadinessExplanation([highFinding], 'Ready');
+  assert.match(explanation, /1 critical\/high-severity finding/);
+  assert.match(explanation, /no finding is explicitly classified as a launch blocker/i);
+  assert.doesNotMatch(explanation, /no launch blockers or high-severity findings/i);
+});
+
+test('missing viewport is a medium-severity mobile usability signal, not an automatic critical blocker', () => {
+  const result = audit({ html: cleanHtml.replace(/\s*<meta name="viewport"[^>]*>/, '') });
+  const issue = result.issues.find((item) => item.id === 'seo-viewport');
+  assert.equal(issue?.severity, 'medium');
+  assert.equal(issue?.readinessBlocker, undefined);
+  assert.equal(calculateReadinessVerdict(result.issues), 'Ready');
+});
+
 test('a missing H1 is reported as a structural signal with calibrated medium severity', () => {
   const result = audit({ html: cleanHtml.replace('<h1>Example product</h1>', '') });
   const issue = result.issues.find((item) => item.id === 'a11y-h1-missing');
@@ -140,6 +164,7 @@ test('readiness verdict is independent of score and explicit blockers always win
   assert.equal(calculateReadinessVerdict([highFinding]), 'Ready');
   assert.equal(calculateReadinessVerdict([{ ...highFinding, readinessBlocker: true }]), 'Not ready');
   assert.equal(calculateReadinessVerdict([{ ...highFinding, severity: 'critical' as const }]), 'Ready');
+  assert.equal(calculateReadinessVerdict([{ ...highFinding, severity: 'high' as const, readinessRelevant: false }]), 'Ready');
 });
 
 test('missing security headers are hardening-only and leave an otherwise healthy HTTPS site Ready', () => {
