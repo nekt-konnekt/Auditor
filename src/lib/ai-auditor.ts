@@ -6,7 +6,7 @@ export interface AiAuditAnalysis {
 }
 
 type AuditKind = 'url' | 'code';
-type Provider = 'gemini' | 'alibaba' | 'groq' | 'openrouter' | 'openai-compatible';
+type Provider = 'ollama-cloud' | 'gemini' | 'alibaba' | 'groq' | 'openrouter' | 'openai-compatible';
 
 const validCategories = ['security', 'seo', 'accessibility', 'performance', 'quality'];
 const validSeverities = ['critical', 'high', 'medium', 'low', 'passed'];
@@ -144,6 +144,13 @@ async function analyzeOpenAICompatible(provider: Provider, prompt: string, apiKe
 }
 
 function getProviderConfig(provider: Provider): { key?: string; baseUrl: string; model: string } {
+  if (provider === 'ollama-cloud') {
+    return {
+      key: process.env.OLLAMA_API_KEY,
+      baseUrl: process.env.OLLAMA_BASE_URL || 'https://ollama.com/v1',
+      model: process.env.OLLAMA_MODEL || 'gemma4:31b',
+    };
+  }
   if (provider === 'gemini') {
     return { key: process.env.GEMINI_API_KEY, baseUrl: '', model: process.env.GEMINI_MODEL || 'gemini-3.8-flash' };
   }
@@ -155,7 +162,7 @@ function getProviderConfig(provider: Provider): { key?: string; baseUrl: string;
     };
   }
   if (provider === 'groq') {
-    return { key: process.env.GROQ_API_KEY, baseUrl: 'https://api.groq.com/openai/v1', model: process.env.GROQ_MODEL || '' };
+    return { key: process.env.GROQ_API_KEY, baseUrl: 'https://api.groq.com/openai/v1', model: process.env.GROQ_MODEL || 'openai/gpt-oss-120b' };
   }
   if (provider === 'openrouter') {
     return { key: process.env.OPENROUTER_API_KEY, baseUrl: 'https://openrouter.ai/api/v1', model: process.env.OPENROUTER_MODEL || '' };
@@ -164,8 +171,8 @@ function getProviderConfig(provider: Provider): { key?: string; baseUrl: string;
 }
 
 /**
- * Gemini is the primary provider. AI_FALLBACK_PROVIDERS is an ordered,
- * comma-separated list (default: alibaba). Missing keys are skipped.
+ * Ollama Cloud is the default primary provider. AI_FALLBACK_PROVIDERS is an ordered,
+ * comma-separated list (default: groq,gemini,alibaba). Missing keys are skipped.
  * Each provider has a short timeout so serverless requests can still return deterministic audit results.
  * If every AI provider fails, deterministic audit results remain available.
  */
@@ -176,11 +183,11 @@ export async function analyzeWithAI(
   contextMeta: Record<string, any>,
 ): Promise<AiAuditAnalysis> {
   const prompt = buildPrompt(type, target, contentSnippet, contextMeta);
-  const primary = (process.env.AI_PRIMARY_PROVIDER || 'gemini').toLowerCase() as Provider;
-  const fallbacks = (process.env.AI_FALLBACK_PROVIDERS || 'alibaba')
+  const primary = (process.env.AI_PRIMARY_PROVIDER || 'ollama-cloud').toLowerCase() as Provider;
+  const fallbacks = (process.env.AI_FALLBACK_PROVIDERS || 'groq,gemini,alibaba')
     .split(',').map((p) => p.trim().toLowerCase()).filter(Boolean) as Provider[];
   const providers = [...new Set<Provider>([primary, ...fallbacks])];
-  const supported: Provider[] = ['gemini', 'alibaba', 'groq', 'openrouter', 'openai-compatible'];
+  const supported: Provider[] = ['ollama-cloud', 'gemini', 'alibaba', 'groq', 'openrouter', 'openai-compatible'];
   const errors: string[] = [];
 
   for (const provider of providers) {
